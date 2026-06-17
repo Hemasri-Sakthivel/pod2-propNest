@@ -1,0 +1,334 @@
+{
+  "info": {
+    "_postman_id": "b1e7c0a2-9d3e-4f51-8a2b-propnestiam001",
+    "name": "PropNest - IAM API",
+    "description": "Identity & Access Management - 15 endpoints. Base URL: http://localhost:8082/propNest/IAM\n\nImport this collection, then run the requests top-to-bottom. The two Login requests auto-store tokens into collection variables (adminToken / userToken), so protected requests work without copy-pasting.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8082/propNest/IAM", "type": "string" },
+    { "key": "adminToken", "value": "", "type": "string" },
+    { "key": "adminRefreshToken", "value": "", "type": "string" },
+    { "key": "userToken", "value": "", "type": "string" },
+    { "key": "userRefreshToken", "value": "", "type": "string" },
+    { "key": "tenantUserId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1. Auth (public)",
+      "item": [
+        {
+          "name": "Register (admin, roleId 6)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Admin User\",\n  \"email\": \"admin@propnest.com\",\n  \"phone\": \"9876500000\",\n  \"password\": \"Admin@123\",\n  \"roleId\": 6\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "auth", "register" ]
+            },
+            "description": "Register a new user account. roleId: 1=OWNER, 2=TENANT, 3=PROPERTY_MANAGER, 4=TECHNICIAN, 5=FINANCE_EXECUTIVE, 6=REAL_ESTATE_ADMIN. Returns 201."
+          }
+        },
+        {
+          "name": "Login (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.collectionVariables.set('adminToken', json.accessToken);",
+                  "  pm.collectionVariables.set('adminRefreshToken', json.refreshToken);",
+                  "  console.log('Stored adminToken / adminRefreshToken');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@propnest.com\",\n  \"password\": \"Admin@123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "auth", "login" ]
+            },
+            "description": "Authenticate and receive access & refresh tokens. The test script stores them into adminToken / adminRefreshToken."
+          }
+        },
+        {
+          "name": "Logout (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{adminRefreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "auth", "logout" ]
+            },
+            "description": "Logout and revoke the refresh token. Requires a valid access token. Returns 200."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Token Management",
+      "item": [
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{adminRefreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh-token",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "auth", "refresh-token" ]
+            },
+            "description": "Issue a new access token using a valid refresh token. Returns 200 with accessToken."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Self Service (authenticated)",
+      "item": [
+        {
+          "name": "Get Own Profile",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{adminToken}}" } ],
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "users", "me" ]
+            },
+            "description": "Get own profile using the JWT identity. Returns 200."
+          }
+        },
+        {
+          "name": "Update Own Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Admin Updated\",\n  \"phone\": \"9876511111\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "users", "me" ]
+            },
+            "description": "Update own name and phone only. Email and role cannot be changed here. Returns 200."
+          }
+        },
+        {
+          "name": "Change Own Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{userToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"Tenant@123\",\n  \"newPassword\": \"NewPass@456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me/password",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "users", "me", "password" ]
+            },
+            "description": "Change own password. Current password must match. Returns 200. Uses userToken by default - switch to adminToken to change the admin's password."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Admin - User Management (REAL_ESTATE_ADMIN)",
+      "item": [
+        {
+          "name": "Create User (tenant, roleId 2)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ravi Kumar\",\n  \"email\": \"ravi@propnest.com\",\n  \"phone\": \"9123456789\",\n  \"password\": \"Tenant@123\",\n  \"roleId\": 2\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/users",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "admin", "users" ]
+            },
+            "description": "Admin creates a new user account with any role. Returns 201."
+          }
+        },
+        {
+          "name": "Get All Users (with optional filters)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const users = pm.response.json().users;",
+                  "  if (users && users.length) {",
+                  "    pm.collectionVariables.set('tenantUserId', users[0].userId);",
+                  "    console.log('Stored tenantUserId = ' + users[0].userId);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{adminToken}}" } ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users?role=TENANT&status=A",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "admin", "users" ],
+              "query": [
+                { "key": "role", "value": "TENANT", "description": "Optional. e.g. TENANT, OWNER, PROPERTY_MANAGER..." },
+                { "key": "status", "value": "A", "description": "Optional. A=Active, I=Inactive, S=Suspended" }
+              ]
+            },
+            "description": "Get all registered users. Optional ?role and ?status filters. Stores the first user's id into tenantUserId."
+          }
+        },
+        {
+          "name": "Get User By Id",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{adminToken}}" } ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{tenantUserId}}",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "admin", "users", "{{tenantUserId}}" ]
+            },
+            "description": "Get a specific user profile by id. Returns 200, or 404 if not found."
+          }
+        },
+        {
+          "name": "Change User Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"S\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{tenantUserId}}/status",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "admin", "users", "{{tenantUserId}}", "status" ]
+            },
+            "description": "Change a user's account status. Allowed: A=Active, I=Inactive, S=Suspended. Returns 200."
+          }
+        },
+        {
+          "name": "Reassign User Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleId\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{tenantUserId}}/role",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "admin", "users", "{{tenantUserId}}", "role" ]
+            },
+            "description": "Reassign a user to a different role. roleId must be valid (see Get All Roles). Returns 200."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Roles (REAL_ESTATE_ADMIN)",
+      "item": [
+        {
+          "name": "Get All Roles",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{adminToken}}" } ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/roles",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "admin", "roles" ]
+            },
+            "description": "Get all available roles. Returns 200 with the 6 PropNest roles."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Audit Logs (REAL_ESTATE_ADMIN)",
+      "item": [
+        {
+          "name": "Get All Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{adminToken}}" } ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/audit-log",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "admin", "audit-log" ]
+            },
+            "description": "Get all audit logs across all users, newest first. Returns 200."
+          }
+        },
+        {
+          "name": "Get Audit Logs For A User",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{adminToken}}" } ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/audit-log/user/{{tenantUserId}}",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "admin", "audit-log", "user", "{{tenantUserId}}" ]
+            },
+            "description": "Get audit logs for a specific user. Returns 200, or 404 if the user does not exist."
+          }
+        }
+      ]
+    }
+  ]
+}

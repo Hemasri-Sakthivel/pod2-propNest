@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>PropNest — Concepts Used</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.55;
+  color: #1f2328; max-width: 980px; margin: 0 auto; padding: 40px 32px; background: #fff; }
+h1 { font-size: 28px; border-bottom: 3px solid #2563eb; padding-bottom: 8px; margin-top: 8px; }
+h2 { font-size: 22px; border-bottom: 1px solid #d0d7de; padding-bottom: 6px; margin-top: 34px; color: #1d4ed8; }
+h3 { font-size: 17px; margin-top: 22px; }
+p { margin: 10px 0; }
+code { background: #f3f4f6; padding: 1px 6px; border-radius: 5px; font-size: 0.86em;
+  font-family: "Cascadia Code", Consolas, "Courier New", monospace; color: #b91c1c; }
+strong { color: #111827; }
+blockquote { border-left: 4px solid #2563eb; background: #eff6ff; margin: 14px 0;
+  padding: 8px 16px; border-radius: 0 6px 6px 0; color: #374151; }
+ul { margin: 10px 0; padding-left: 24px; }
+li { margin: 4px 0; }
+hr { border: none; border-top: 1px solid #e5e7eb; margin: 28px 0; }
+table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14px; }
+th, td { border: 1px solid #d0d7de; padding: 8px 11px; text-align: left; vertical-align: top; }
+th { background: #2563eb; color: #fff; font-weight: 600; }
+tr:nth-child(even) td { background: #f6f8fa; }
+@media print { body { padding: 0; max-width: none; } h2 { page-break-after: avoid; }
+  table, blockquote { page-break-inside: avoid; } a { color: inherit; text-decoration: none; } }
+</style></head>
+<body>
+<h1>PropNest — Concepts Used (Java, Spring, Spring Boot, Spring Data JPA, MySQL, Maven)</h1>
+<blockquote>A theory-to-code map for your external review. For every concept you may be asked about, this document gives a <strong>short definition</strong> and the <strong>exact place in PropNest where you used it</strong>. Use the "Where in my project" column to point the reviewer at real code.</blockquote>
+<h2>0. One-line project summary (say this first)</h2>
+<p>PropNest is a <strong>Spring Boot REST backend</strong> for an Identity &amp; Access Management</p>
+<p>(IAM) module. It exposes REST endpoints for **register / login / logout /</p>
+<p>refresh-token<strong>, </strong>admin user management<strong>, </strong>role management<strong>, and </strong>audit</p>
+<p>logs<strong>. It uses </strong>Spring Data JPA<strong> over </strong>MySQL<strong> for persistence, </strong>JWT** for</p>
+<p>stateless authentication, <strong>BCrypt</strong> for password hashing, and is built with</p>
+<p><strong>Maven</strong>.</p>
+<p><strong>Layered architecture used:</strong></p>
+<p><code>Controller (web)</code> → <code>Service (business logic)</code> → <code>Repository (data access)</code> → <code>MySQL</code></p>
+<p>with <code>DTO</code>s crossing the boundaries, <code>Entity</code>s mapped to tables, and a <code>JWT filter</code> + <code>AccessGuard</code> enforcing security.</p>
+<hr/>
+<h1>1. Core Java Concepts</h1>
+<table>
+<thead><tr><th>Concept</th><th>What to say (theory)</th><th>Where in my project</th></tr></thead>
+<tbody>
+<tr><td><strong>OOP — Encapsulation</strong></td><td>Fields are private, exposed via getters/setters.</td><td><code>entity/User.java</code>, <code>entity/Role.java</code> (private fields + Lombok-generated accessors).</td></tr>
+<tr><td><strong>Classes &amp; Objects</strong></td><td>Blueprint vs instance.</td><td>Every <code>*Service</code>, <code>*Controller</code>, entity.</td></tr>
+<tr><td><strong>Interfaces</strong></td><td>Contract without implementation; Spring injects an implementation.</td><td>All repositories are interfaces: <code>UserRepository</code>, <code>RoleRepository</code>, <code>AuditLogRepository</code>, <code>UserSessionRepository</code>. <code>PasswordEncoder</code> is an interface implemented by <code>BCryptPasswordEncoder</code>.</td></tr>
+<tr><td><strong>Inheritance / extends</strong></td><td>Reusing a base class.</td><td><code>JwtAuthenticationFilter extends OncePerRequestFilter</code>; repositories <code>extends JpaRepository</code>.</td></tr>
+<tr><td><strong>Abstraction</strong></td><td>Hiding *how*, exposing *what*.</td><td><code>JwtService</code> hides JWT signing details behind <code>generateAccessToken()</code> / <code>parseAccessToken()</code>.</td></tr>
+<tr><td><strong>Enums</strong></td><td>Fixed set of constants.</td><td><code>UserStatus</code> (A/I…), <code>SessionStatus</code> (ACTIVE/REVOKED). Used as a typed column via <code>@Enumerated</code>.</td></tr>
+<tr><td><strong>Records (Java 16+)</strong></td><td>Immutable data carrier; auto getters/equals/hashCode.</td><td>All DTOs are records: <code>RegisterRequest</code>, <code>LoginRequest</code>, <code>LoginResponse</code>, <code>UserResponse</code>, etc. Access fields like <code>request.email()</code>.</td></tr>
+<tr><td><strong>Generics</strong></td><td>Type-safe parameterization.</td><td><code>JpaRepository&lt;User, Long&gt;</code>, <code>Optional&lt;User&gt;</code>, <code>List&lt;User&gt;</code>, <code>ResponseEntity&lt;LoginResponse&gt;</code>.</td></tr>
+<tr><td><strong>Optional</strong></td><td>Null-safe container; avoids NullPointerException.</td><td><code>userRepository.findByEmailIgnoreCase(...)</code> returns <code>Optional&lt;User&gt;</code>; chained with <code>.orElseThrow(...)</code>.</td></tr>
+<tr><td><strong>Exception handling (custom exceptions)</strong></td><td>Throw domain-specific exceptions, handle centrally.</td><td><code>InvalidCredentialsException</code>, <code>EmailAlreadyExistsException</code>, <code>AccountNotActiveException</code>, etc. in <code>exception/</code>.</td></tr>
+<tr><td><strong>Lambda expressions</strong></td><td>Anonymous function.</td><td><code>.orElseThrow(() -&gt; new InvalidRoleException(...))</code>, <code>ifPresent(session -&gt; {...})</code> in <code>AuthService</code>.</td></tr>
+<tr><td><strong>Method references</strong></td><td>Shorthand for a lambda.</td><td><code>.orElseThrow(InvalidCredentialsException::new)</code> in <code>AuthService.login()</code>.</td></tr>
+<tr><td><strong>Streams API</strong></td><td>Functional pipeline over collections.</td><td><code>GlobalExceptionHandler.handleValidation()</code> — <code>.stream().map(...).collect(Collectors.joining("; "))</code>.</td></tr>
+<tr><td><strong>Static utility / private constructor</strong></td><td>Class that must not be instantiated.</td><td><code>AuthContext</code> — <code>private AuthContext()</code> + static methods.</td></tr>
+<tr><td><strong>ThreadLocal</strong></td><td>Per-thread storage (one value per request thread).</td><td><code>AuthContext</code> holds the <code>CurrentUser</code> for the current request in a <code>ThreadLocal</code>.</td></tr>
+<tr><td><strong>String / Base64 / SecureRandom</strong></td><td>Crypto-safe randomness + encoding.</td><td><code>JwtService.generateRefreshToken()</code> uses <code>SecureRandom</code> + <code>Base64.getUrlEncoder()</code>.</td></tr>
+<tr><td><strong>java.time (Instant)</strong></td><td>Modern date/time API.</td><td><code>Instant.now()</code>, token expiry math in <code>JwtService</code> and <code>AuthService</code>.</td></tr>
+<tr><td><strong>Builder pattern</strong></td><td>Fluent object construction.</td><td><code>User.builder()...build()</code> in <code>AuthService.register()</code> (via Lombok <code>@Builder</code>).</td></tr>
+</tbody></table>
+<p><strong>Likely question — "Why records for DTOs?"</strong></p>
+<p>Because DTOs are immutable data holders; records remove boilerplate (constructor,</p>
+<p>getters, <code>equals</code>, <code>hashCode</code>) and make intent clear.</p>
+<hr/>
+<h1>2. Lombok (boilerplate reduction — often grouped with "Java")</h1>
+<table>
+<thead><tr><th>Annotation</th><th>Purpose</th><th>Where</th></tr></thead>
+<tbody>
+<tr><td><code>@Getter</code> / <code>@Setter</code></td><td>Generate accessors</td><td><code>User</code>, <code>Role</code>, entities</td></tr>
+<tr><td><code>@NoArgsConstructor</code> / <code>@AllArgsConstructor</code></td><td>Generate constructors (JPA needs no-args)</td><td><code>User</code>, <code>Role</code></td></tr>
+<tr><td><code>@Builder</code> / <code>@Builder.Default</code></td><td>Builder pattern + default field value</td><td><code>User</code> (<code>status = UserStatus.A</code> default)</td></tr>
+</tbody></table>
+<p>Configured as an <strong>annotation processor</strong> in <code>pom.xml</code> (<code>maven-compiler-plugin</code> → <code>annotationProcessorPaths</code>) and <strong>excluded from the final jar</strong> (<code>spring-boot-maven-plugin</code> excludes Lombok).</p>
+<hr/>
+<h1>3. Spring Framework (Core) Concepts</h1>
+<table>
+<thead><tr><th>Concept</th><th>Theory</th><th>Where in my project</th></tr></thead>
+<tbody>
+<tr><td><strong>IoC (Inversion of Control) / Spring Container</strong></td><td>Spring creates and manages objects (beans) instead of you using <code>new</code>.</td><td>The whole app — beans created at startup.</td></tr>
+<tr><td><strong>Dependency Injection (Constructor injection)</strong></td><td>Dependencies passed in via constructor; promotes immutability + testability.</td><td><code>AuthController(AuthService)</code>, <code>AuthService(UserRepository, RoleRepository, ...)</code> — all injected via constructor.</td></tr>
+<tr><td><strong>Bean</strong></td><td>Object managed by Spring.</td><td><code>PasswordEncoder</code> <code>@Bean</code> in <code>SecurityBeansConfig</code>; <code>ApplicationRunner</code> bean in <code>RoleSeeder</code>.</td></tr>
+<tr><td><strong>Stereotype annotations</strong></td><td>Mark a class as a Spring-managed component.</td><td><code>@Service</code> (<code>AuthService</code>, <code>JwtService</code>...), <code>@RestController</code> (controllers), <code>@Component</code> (<code>JwtAuthenticationFilter</code>, <code>AccessGuard</code>), <code>@Configuration</code> (<code>SecurityBeansConfig</code>, <code>RoleSeeder</code>).</td></tr>
+<tr><td><strong><code>@Configuration</code> + <code>@Bean</code></strong></td><td>Java-based bean definitions.</td><td><code>SecurityBeansConfig.passwordEncoder()</code>.</td></tr>
+<tr><td><strong><code>@Value</code> (property injection)</strong></td><td>Inject values from <code>application.properties</code>.</td><td><code>JwtService</code> constructor — <code>@Value("${propnest.jwt.secret}")</code>, expiry, issuer.</td></tr>
+<tr><td><strong><code>@Transactional</code></strong></td><td>Wrap a method in a DB transaction (commit/rollback).</td><td><code>AuthService.register/login/logout/refreshToken</code> are <code>@Transactional</code>.</td></tr>
+<tr><td><strong>Spring MVC (DispatcherServlet)</strong></td><td>Routes HTTP requests to controller methods.</td><td>All <code>@RestController</code> classes; <code>spring.main.web-application-type=servlet</code>.</td></tr>
+<tr><td><strong>Servlet Filter / <code>OncePerRequestFilter</code></strong></td><td>Cross-cutting logic per request, before controllers.</td><td><code>JwtAuthenticationFilter</code> validates the Bearer token on every protected <code>/IAM/*</code> request.</td></tr>
+</tbody></table>
+<p><strong>Likely question — "Why constructor injection over <code>@Autowired</code> field injection?"</strong></p>
+<p>It makes dependencies explicit and final, allows the class to be unit-tested</p>
+<p>without Spring, and prevents partially-constructed objects.</p>
+<hr/>
+<h1>4. Spring Boot Concepts</h1>
+<table>
+<thead><tr><th>Concept</th><th>Theory</th><th>Where in my project</th></tr></thead>
+<tbody>
+<tr><td><strong><code>@SpringBootApplication</code></strong></td><td>Meta-annotation = <code>@Configuration</code> + <code>@EnableAutoConfiguration</code> + <code>@ComponentScan</code>.</td><td><code>PropNestApplication.java</code>.</td></tr>
+<tr><td><strong>Auto-configuration</strong></td><td>Boot auto-wires beans based on classpath (e.g. sees JPA + MySQL → configures <code>DataSource</code>/<code>EntityManager</code>).</td><td>DataSource &amp; JPA configured automatically from <code>pom.xml</code> + <code>application.properties</code>.</td></tr>
+<tr><td><strong>Starters</strong></td><td>Curated dependency bundles.</td><td><code>spring-boot-starter-data-jpa</code>, <code>-validation</code>, <code>-webmvc</code>, <code>-webflux</code> in <code>pom.xml</code>.</td></tr>
+<tr><td><strong>Embedded server</strong></td><td>No external Tomcat; runs <code>main()</code>.</td><td><code>SpringApplication.run(...)</code> — runs on <code>server.port=8083</code>.</td></tr>
+<tr><td><strong>Externalized configuration</strong></td><td>Settings in <code>application.properties</code>, not code.</td><td><code>application.properties</code> — port, context-path, datasource, JPA, JWT secrets/expiry.</td></tr>
+<tr><td><strong><code>server.servlet.context-path</code></strong></td><td>Base path prefix.</td><td><code>/propNest</code> → endpoints look like <code>/propNest/IAM/auth/login</code>.</td></tr>
+<tr><td><strong><code>ApplicationRunner</code></strong></td><td>Run code once after startup.</td><td><code>RoleSeeder</code> seeds the 6 fixed roles on boot.</td></tr>
+<tr><td><strong>Bean validation integration</strong></td><td><code>@Valid</code> triggers automatic request validation.</td><td>Controllers: <code>@Valid @RequestBody RegisterRequest</code>.</td></tr>
+<tr><td><strong>Profiles/test config</strong></td><td>Separate setup for tests.</td><td>Tests use H2 (<code>h2</code> test dependency) instead of MySQL.</td></tr>
+</tbody></table>
+<p><strong>Likely question — "What does Spring Boot actually do for you?"</strong></p>
+<p>Auto-configuration + starters + embedded server + externalized config — you write</p>
+<p>business code, Boot handles wiring, the servlet container, and sensible defaults.</p>
+<hr/>
+<h1>5. Spring Web / REST Concepts</h1>
+<table>
+<thead><tr><th>Concept</th><th>Theory</th><th>Where in my project</th></tr></thead>
+<tbody>
+<tr><td><strong><code>@RestController</code></strong></td><td><code>@Controller</code> + <code>@ResponseBody</code>; returns JSON, not views.</td><td><code>AuthController</code>, <code>AdminUserController</code>, <code>RoleController</code>, <code>AuditLogController</code>, <code>UserSelfController</code>.</td></tr>
+<tr><td><strong><code>@RequestMapping</code></strong></td><td>Base path for a controller.</td><td><code>@RequestMapping("/IAM/auth")</code> on <code>AuthController</code>.</td></tr>
+<tr><td><strong><code>@PostMapping</code> / <code>@GetMapping</code> / etc.</strong></td><td>Map HTTP verb + sub-path.</td><td><code>@PostMapping("/login")</code>, <code>@PostMapping("/register")</code>.</td></tr>
+<tr><td><strong><code>@RequestBody</code></strong></td><td>Deserialize JSON body → Java object.</td><td><code>register(@Valid @RequestBody RegisterRequest request)</code>.</td></tr>
+<tr><td><strong><code>@PathVariable</code> / <code>@RequestParam</code></strong></td><td>Bind URL parts / query params.</td><td>Admin/role controllers (e.g. user id in path).</td></tr>
+<tr><td><strong><code>ResponseEntity</code></strong></td><td>Full control of status + body + headers.</td><td><code>ResponseEntity.status(HttpStatus.CREATED).body(...)</code>, <code>ResponseEntity.ok(...)</code>.</td></tr>
+<tr><td><strong>HTTP status codes</strong></td><td>Correct semantics (201 created, 200 ok, 401, 403, 404, 409).</td><td><code>AuthController</code> (201 on register); <code>GlobalExceptionHandler</code> maps each exception to a status.</td></tr>
+<tr><td><strong><code>@RestControllerAdvice</code> + <code>@ExceptionHandler</code></strong></td><td>Centralized, consistent error handling across all controllers.</td><td><code>GlobalExceptionHandler</code> → uniform <code>ErrorResponse</code> JSON.</td></tr>
+<tr><td><strong>DTO pattern</strong></td><td>Never expose entities directly; map to request/response objects.</td><td><code>dto/</code> package — e.g. password is never returned, <code>LoginResponse</code> carries only token + role.</td></tr>
+</tbody></table>
+<p><strong>Likely question — "Difference between <code>@Controller</code> and <code>@RestController</code>?"</strong></p>
+<p><code>@RestController</code> = <code>@Controller</code> + <code>@ResponseBody</code>, so every method's return value</p>
+<p>is serialized to the response body (JSON) instead of resolving a view name.</p>
+<hr/>
+<h1>6. Security Concepts (custom, not full Spring Security)</h1>
+<blockquote>Important talking point: you deliberately <strong>did not</strong> enable full Spring Security auto-config. You pulled in only <code>spring-security-crypto</code> for BCrypt and built your own JWT filter. (See the comment in <code>SecurityBeansConfig</code>.)</blockquote>
+<table>
+<thead><tr><th>Concept</th><th>Theory</th><th>Where</th></tr></thead>
+<tbody>
+<tr><td><strong>Authentication vs Authorization</strong></td><td>AuthN = who you are; AuthZ = what you can do.</td><td>AuthN: <code>JwtAuthenticationFilter</code> validates token. AuthZ: <code>AccessGuard.requireAdmin()</code> checks role.</td></tr>
+<tr><td><strong>JWT (stateless access token)</strong></td><td>Signed token carrying claims; server doesn't store it.</td><td><code>JwtService.generateAccessToken()</code> builds a signed JWT with <code>subject=userId</code>, <code>email</code>, <code>role</code> claims; <code>parseAccessToken()</code> verifies signature + issuer + expiry.</td></tr>
+<tr><td><strong>Refresh token (stateful)</strong></td><td>Opaque random token stored in DB, used to mint new access tokens.</td><td><code>JwtService.generateRefreshToken()</code> (SecureRandom) + persisted as <code>UserSession</code> in DB; validated in <code>AuthService.refreshToken()</code>.</td></tr>
+<tr><td><strong>BCrypt password hashing</strong></td><td>One-way salted hash; never store plaintext.</td><td><code>BCryptPasswordEncoder</code> bean; <code>passwordEncoder.encode()</code> on register, <code>.matches()</code> on login.</td></tr>
+<tr><td><strong>Bearer token scheme</strong></td><td><code>Authorization: Bearer &lt;token&gt;</code> header.</td><td><code>JwtAuthenticationFilter.extractBearerToken()</code>.</td></tr>
+<tr><td><strong>HMAC signing key</strong></td><td>Symmetric key signs/verifies the JWT.</td><td><code>Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret))</code>.</td></tr>
+<tr><td><strong>Role-based access control (RBAC)</strong></td><td>Permissions tied to roles.</td><td>6 fixed roles (<code>RoleSeeder</code>); <code>AccessGuard</code> enforces <code>REAL_ESTATE_ADMIN</code>.</td></tr>
+<tr><td><strong>Audit logging</strong></td><td>Record security-relevant actions.</td><td><code>AuditService.record(...)</code> on register/login/logout/refresh.</td></tr>
+</tbody></table>
+<hr/>
+<h1>7. Spring Data JPA Concepts</h1>
+<table>
+<thead><tr><th>Concept</th><th>Theory</th><th>Where in my project</th></tr></thead>
+<tbody>
+<tr><td><strong>JPA / Hibernate (ORM)</strong></td><td>Map Java objects ↔ relational tables; Hibernate is the implementation.</td><td>All <code>@Entity</code> classes; <code>spring.jpa.*</code> properties.</td></tr>
+<tr><td><strong><code>@Entity</code> / <code>@Table</code></strong></td><td>Mark a class as a persistent table.</td><td><code>User</code> → <code>users</code>, <code>Role</code> → <code>roles</code>, <code>AuditLog</code>, <code>UserSession</code>.</td></tr>
+<tr><td><strong><code>@Id</code> + <code>@GeneratedValue</code></strong></td><td>Primary key + generation strategy.</td><td><code>User.userId</code> uses <code>GenerationType.IDENTITY</code> (DB auto-increment). <code>Role.roleId</code> is assigned manually (fixed IDs).</td></tr>
+<tr><td><strong><code>@Column</code></strong></td><td>Map field → column with constraints.</td><td><code>@Column(name="email", nullable=false, unique=true, length=150)</code>.</td></tr>
+<tr><td><strong><code>@Enumerated(EnumType.STRING)</code></strong></td><td>Persist enum by name, not ordinal.</td><td><code>User.status</code>, <code>UserSession.status</code>.</td></tr>
+<tr><td><strong>Relationships — <code>@ManyToOne</code> + <code>@JoinColumn</code></strong></td><td>Many users → one role; FK column.</td><td><code>User.role</code> → <code>@ManyToOne(fetch=EAGER) @JoinColumn(name="roleId")</code>.</td></tr>
+<tr><td><strong>Fetch strategy (EAGER/LAZY)</strong></td><td>When related data is loaded.</td><td><code>User.role</code> is <code>FetchType.EAGER</code> (role always needed for auth).</td></tr>
+<tr><td><strong><code>JpaRepository&lt;T, ID&gt;</code></strong></td><td>Generic CRUD + paging repository; no implementation needed.</td><td><code>UserRepository extends JpaRepository&lt;User, Long&gt;</code>, etc.</td></tr>
+<tr><td><strong>Derived query methods</strong></td><td>Method name → generated SQL.</td><td><code>findByEmailIgnoreCase</code>, <code>existsByEmailIgnoreCase</code>, <code>findByStatus</code>, <code>findByRole_RoleNameIgnoreCaseAndStatus</code> (nested property + combined).</td></tr>
+<tr><td><strong>Ordering in query names</strong></td><td><code>OrderBy...Desc</code>.</td><td><code>AuditLogRepository.findAllByOrderByTimeStampDesc()</code>, <code>findByUserIdOrderByTimeStampDesc</code>.</td></tr>
+<tr><td><strong>CRUD via inherited methods</strong></td><td><code>save</code>, <code>findById</code>, <code>existsById</code>.</td><td><code>userRepository.save(user)</code>, <code>roleRepository.findById(...)</code>, <code>roleRepository.existsById(...)</code> in <code>RoleSeeder</code>.</td></tr>
+<tr><td><strong><code>@Transactional</code> boundaries</strong></td><td>Service-layer transactions.</td><td><code>AuthService</code> methods.</td></tr>
+<tr><td><strong><code>ddl-auto=update</code></strong></td><td>Hibernate creates/updates schema from entities.</td><td><code>spring.jpa.hibernate.ddl-auto=update</code>.</td></tr>
+<tr><td><strong><code>open-in-view=false</code></strong></td><td>Close the persistence context after the service layer (best practice).</td><td><code>application.properties</code>.</td></tr>
+<tr><td><strong>SQL logging</strong></td><td>Inspect generated SQL during dev.</td><td><code>spring.jpa.show-sql=true</code>, <code>format_sql=true</code>.</td></tr>
+</tbody></table>
+<p><strong>Likely question — "How does <code>findByEmailIgnoreCase</code> work with no SQL?"</strong></p>
+<p>Spring Data JPA parses the method name at startup and generates the query</p>
+<p>(<code>WHERE lower(email) = lower(?)</code>) automatically — no implementation written.</p>
+<hr/>
+<h1>8. MySQL Concepts</h1>
+<table>
+<thead><tr><th>Concept</th><th>Theory</th><th>Where in my project</th></tr></thead>
+<tbody>
+<tr><td><strong>Relational database</strong></td><td>Data in tables with rows/columns + relationships.</td><td><code>users</code>, <code>roles</code>, <code>audit_log</code>, <code>user_sessions</code> tables.</td></tr>
+<tr><td><strong>JDBC driver / connection URL</strong></td><td>Java ↔ DB connectivity.</td><td><code>mysql-connector-j</code>; <code>jdbc:mysql://localhost:3306/propnest</code>.</td></tr>
+<tr><td><strong>DataSource / connection pool</strong></td><td>Reused DB connections (HikariCP via Boot).</td><td>Auto-configured from <code>spring.datasource.*</code>.</td></tr>
+<tr><td><strong>Primary key + AUTO_INCREMENT</strong></td><td>Unique row identity.</td><td><code>users.userId</code> (<code>GenerationType.IDENTITY</code>).</td></tr>
+<tr><td><strong>Foreign key</strong></td><td>Referential integrity between tables.</td><td><code>users.roleId</code> → <code>roles.roleId</code> (via <code>@JoinColumn</code>).</td></tr>
+<tr><td><strong>Unique constraint</strong></td><td>No duplicate values.</td><td><code>users.email</code> unique (<code>@Column(unique=true)</code>) — enforces one account per email.</td></tr>
+<tr><td><strong><code>createDatabaseIfNotExist</code></strong></td><td>Auto-create schema on first run.</td><td>Datasource URL param.</td></tr>
+<tr><td><strong>Seed data</strong></td><td>Pre-populate reference tables.</td><td><code>RoleSeeder</code> inserts the 6 roles if absent.</td></tr>
+</tbody></table>
+<p><strong>Likely question — "How is the schema created?"</strong></p>
+<p>Hibernate generates/updates it from the entities at startup (<code>ddl-auto=update</code>),</p>
+<p>and the MySQL URL auto-creates the database if missing.</p>
+<hr/>
+<h1>9. Maven Concepts</h1>
+<table>
+<thead><tr><th>Concept</th><th>Theory</th><th>Where in my project</th></tr></thead>
+<tbody>
+<tr><td><strong><code>pom.xml</code></strong></td><td>Project Object Model — the build descriptor.</td><td>Project root <code>pom.xml</code>.</td></tr>
+<tr><td><strong><code>groupId</code> / <code>artifactId</code> / <code>version</code></strong></td><td>Project coordinates.</td><td><code>com.cog</code> / <code>propNest</code> / <code>0.0.1-SNAPSHOT</code>.</td></tr>
+<tr><td><strong>Parent POM / dependency management</strong></td><td>Inherit managed versions.</td><td><code>spring-boot-starter-parent</code> 4.0.6 — that's why most deps need no version.</td></tr>
+<tr><td><strong>Dependencies &amp; scopes</strong></td><td>What the build needs + when.</td><td><code>runtime</code> (MySQL driver, jjwt-impl), <code>test</code> (H2, test starters), <code>optional</code> (Lombok).</td></tr>
+<tr><td><strong>Transitive dependencies</strong></td><td>Pulled in automatically by starters.</td><td>Hibernate, Jackson, Tomcat all come via starters.</td></tr>
+<tr><td><strong>Build plugins</strong></td><td>Extend the build lifecycle.</td><td><code>spring-boot-maven-plugin</code> (repackage into runnable jar), <code>maven-compiler-plugin</code> (Java 21 + Lombok processor).</td></tr>
+<tr><td><strong>Annotation processor path</strong></td><td>Lombok runs at compile time.</td><td><code>maven-compiler-plugin</code> → <code>annotationProcessorPaths</code>.</td></tr>
+<tr><td><strong>Java version property</strong></td><td>Target JDK.</td><td><code>&lt;java.version&gt;21&lt;/java.version&gt;</code>.</td></tr>
+<tr><td><strong>Maven Wrapper (<code>mvnw</code>)</strong></td><td>Reproducible Maven without local install.</td><td><code>.mvn/wrapper/maven-wrapper.properties</code>.</td></tr>
+<tr><td><strong>Build lifecycle phases</strong></td><td><code>compile</code> → <code>test</code> → <code>package</code>.</td><td><code>mvn clean package</code> produces the runnable jar.</td></tr>
+</tbody></table>
+<p><strong>Likely question — "Why don't most dependencies have a <code>&lt;version&gt;</code>?"</strong></p>
+<p>The <code>spring-boot-starter-parent</code> provides a managed dependency BOM, so versions</p>
+<p>are inherited and kept compatible.</p>
+<hr/>
+<h1>10. Testing Concepts (bonus — you have a full test suite)</h1>
+<table>
+<thead><tr><th>Concept</th><th>Theory</th><th>Where</th></tr></thead>
+<tbody>
+<tr><td><strong>Unit tests</strong></td><td>Test one class in isolation.</td><td><code>service/*Test.java</code>, <code>security/JwtServiceTest</code>, <code>AccessGuardTest</code>.</td></tr>
+<tr><td><strong><code>@DataJpaTest</code> / repository tests</strong></td><td>Slice test for the JPA layer on H2.</td><td><code>repository/*Test.java</code>.</td></tr>
+<tr><td><strong>Controller/web tests</strong></td><td>Test the web layer.</td><td><code>controller/*Test.java</code>.</td></tr>
+<tr><td><strong>In-memory DB for tests</strong></td><td>Fast, isolated DB.</td><td>H2 (<code>h2</code> test scope) instead of MySQL.</td></tr>
+<tr><td><strong>Context load test</strong></td><td>Verify the app context starts.</td><td><code>PropNestApplicationTests</code>.</td></tr>
+</tbody></table>
+<hr/>
+<h1>11. Request flow (great for a whiteboard answer)</h1>
+<p><strong><code>POST /propNest/IAM/auth/login</code></strong></p>
+<p>1. <code>JwtAuthenticationFilter</code> — login is a <strong>public path</strong>, so it's skipped.</p>
+<p>2. <code>AuthController.login()</code> — <code>@Valid</code> validates <code>LoginRequest</code>.</p>
+<p>3. <code>AuthService.login()</code> (<code>@Transactional</code>):</p>
+<ul>
+<li><code>userRepository.findByEmailIgnoreCase()</code> → MySQL</li>
+<li><code>passwordEncoder.matches()</code> (BCrypt) verifies password</li>
+<li>checks <code>UserStatus.A</code> (active)</li>
+<li>creates a <code>UserSession</code> (refresh token) → saved to DB</li>
+<li><code>jwtService.generateAccessToken()</code> mints the JWT</li>
+<li><code>auditService.record(...)</code> logs the login</li>
+</ul>
+<p>4. Returns <code>LoginResponse(accessToken, refreshToken, userId, role)</code> as JSON.</p>
+<p><strong>Any protected call, e.g. admin endpoint:</strong></p>
+<p>1. <code>JwtAuthenticationFilter</code> extracts Bearer token → <code>JwtService.parseAccessToken()</code> → binds <code>CurrentUser</code> to <code>AuthContext</code> (ThreadLocal).</p>
+<p>2. <code>AccessGuard.requireAdmin()</code> checks the role → <code>403</code> if not admin.</p>
+<p>3. Controller → Service → Repository → MySQL.</p>
+<p>4. On error, <code>GlobalExceptionHandler</code> returns a consistent <code>ErrorResponse</code>.</p>
+<hr/>
+<h1>12. Quick "I used X here" cheat sheet</h1>
+<ul>
+<li><strong>Java records</strong> → <code>dto/*</code></li>
+<li><strong>Enums</strong> → <code>UserStatus</code>, <code>SessionStatus</code></li>
+<li><strong>Optional + orElseThrow</strong> → <code>AuthService</code>, repositories</li>
+<li><strong>Streams</strong> → <code>GlobalExceptionHandler</code></li>
+<li><strong>ThreadLocal</strong> → <code>AuthContext</code></li>
+<li><strong>Constructor DI</strong> → every service/controller</li>
+<li><strong>@Transactional</strong> → <code>AuthService</code></li>
+<li><strong>@RestControllerAdvice</strong> → <code>GlobalExceptionHandler</code></li>
+<li><strong>Bean validation (@Valid, @NotBlank, @Email…)</strong> → <code>RegisterRequest</code> + controllers</li>
+<li><strong>JpaRepository + derived queries</strong> → <code>UserRepository</code>, <code>AuditLogRepository</code></li>
+<li><strong>@ManyToOne / @JoinColumn</strong> → <code>User.role</code></li>
+<li><strong>JWT + BCrypt</strong> → <code>JwtService</code>, <code>SecurityBeansConfig</code></li>
+<li><strong>ApplicationRunner seeding</strong> → <code>RoleSeeder</code></li>
+<li><strong>Maven starters / plugins</strong> → <code>pom.xml</code></li>
+<li><strong>MySQL datasource + Hibernate ddl</strong> → <code>application.properties</code></li>
+</ul>
+</body></html>
