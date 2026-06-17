@@ -28,6 +28,9 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
+		<!-- Pin to a locally cached version; javafaker needs commons-lang3 and the
+		     Boot-managed 3.19.0 is not reachable behind the corporate proxy. -->
+		<commons-lang3.version>3.14.0</commons-lang3.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -52,6 +55,18 @@
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
 			<optional>true</optional>
+		</dependency>
+		<dependency>
+			<groupId>com.github.javafaker</groupId>
+			<artifactId>javafaker</artifactId>
+			<version>1.0.2</version>
+			<exclusions>
+				<!-- javafaker ships an old snakeyaml that clashes with Spring Boot 4 -->
+				<exclusion>
+					<groupId>org.yaml</groupId>
+					<artifactId>snakeyaml</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
