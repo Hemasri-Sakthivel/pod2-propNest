@@ -9,5 +9,4 @@ public class PropNestApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(PropNestApplication.class, args);
 	}
-
 }
