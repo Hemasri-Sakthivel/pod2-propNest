@@ -1,0 +1,315 @@
+{
+  "info": {
+    "name": "PropNest - Tenant Onboarding & Lease (JWT)",
+    "description": "Module 2.3 endpoints with JWT + role-based access. Run the Auth > Login requests first; they auto-save tokens to collection variables (managerToken, tenantToken, ownerToken, financeToken). Update the applicationId / kycId / leaseId variables to ids that exist in your DB (or freshly created ones) before calling the by-id / state-change requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8089/propNest" },
+    { "key": "managerToken", "value": "" },
+    { "key": "tenantToken", "value": "" },
+    { "key": "ownerToken", "value": "" },
+    { "key": "financeToken", "value": "" },
+    { "key": "applicationId", "value": "1" },
+    { "key": "kycId", "value": "1" },
+    { "key": "leaseId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Auth (run these first)",
+      "item": [
+        {
+          "name": "Register Manager (roleId 3)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth","register"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Manager\",\n  \"email\": \"manager@x.com\",\n  \"phone\": \"9000000003\",\n  \"password\": \"pass123\",\n  \"roleId\": 3\n}" }
+          }
+        },
+        {
+          "name": "Register Tenant (roleId 2)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth","register"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Tenant\",\n  \"email\": \"tenant@x.com\",\n  \"phone\": \"9000000002\",\n  \"password\": \"pass123\",\n  \"roleId\": 2\n}" }
+          }
+        },
+        {
+          "name": "Register Owner (roleId 1)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth","register"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Owner\",\n  \"email\": \"owner@x.com\",\n  \"phone\": \"9000000001\",\n  \"password\": \"pass123\",\n  \"roleId\": 1\n}" }
+          }
+        },
+        {
+          "name": "Register Finance (roleId 5)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth","register"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Finance\",\n  \"email\": \"finance@x.com\",\n  \"phone\": \"9000000005\",\n  \"password\": \"pass123\",\n  \"roleId\": 5\n}" }
+          }
+        },
+        {
+          "name": "Login Manager -> saves managerToken",
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "var j = pm.response.json();",
+            "if (j && j.token) { pm.collectionVariables.set('managerToken', j.token); console.log('managerToken saved'); }"
+          ] } } ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth","login"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"manager@x.com\",\n  \"password\": \"pass123\"\n}" }
+          }
+        },
+        {
+          "name": "Login Tenant -> saves tenantToken",
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "var j = pm.response.json();",
+            "if (j && j.token) { pm.collectionVariables.set('tenantToken', j.token); console.log('tenantToken saved'); }"
+          ] } } ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth","login"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"tenant@x.com\",\n  \"password\": \"pass123\"\n}" }
+          }
+        },
+        {
+          "name": "Login Owner -> saves ownerToken",
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "var j = pm.response.json();",
+            "if (j && j.token) { pm.collectionVariables.set('ownerToken', j.token); console.log('ownerToken saved'); }"
+          ] } } ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth","login"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"owner@x.com\",\n  \"password\": \"pass123\"\n}" }
+          }
+        },
+        {
+          "name": "Login Finance -> saves financeToken",
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "var j = pm.response.json();",
+            "if (j && j.token) { pm.collectionVariables.set('financeToken', j.token); console.log('financeToken saved'); }"
+          ] } } ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth","login"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"finance@x.com\",\n  \"password\": \"pass123\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tenant Application",
+      "item": [
+        {
+          "name": "Create Tenant (TENANT)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{tenantToken}}" } ] },
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/createTenant", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","createTenant"] },
+            "body": { "mode": "raw", "raw": "{\n  \"propertyId\": 1,\n  \"unitId\": 1,\n  \"applicantName\": \"John Doe\",\n  \"email\": \"john@x.com\",\n  \"phone\": \"9876543210\",\n  \"nationalIdRef\": \"AADHAR123456\",\n  \"monthlyIncome\": 75000,\n  \"applicationDate\": \"2024-06-01\"\n}" }
+          }
+        },
+        {
+          "name": "Get All Tenants (MANAGER)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{managerToken}}" } ] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/getAllTenants?status=S", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","getAllTenants"], "query": [ { "key": "status", "value": "S" } ] }
+          }
+        },
+        {
+          "name": "Get Tenant By Id (MANAGER)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{managerToken}}" } ] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/getTenantById/{{applicationId}}", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","getTenantById","{{applicationId}}"] }
+          }
+        },
+        {
+          "name": "Update Tenant S->U (MANAGER)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{managerToken}}" } ] },
+            "method": "PUT",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/updateTenant/{{applicationId}}", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","updateTenant","{{applicationId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"U\"\n}" }
+          }
+        },
+        {
+          "name": "[403] Update Tenant as TENANT",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{tenantToken}}" } ] },
+            "method": "PUT",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/updateTenant/{{applicationId}}", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","updateTenant","{{applicationId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"A\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tenant KYC",
+      "item": [
+        {
+          "name": "Create KYC (TENANT)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{tenantToken}}" } ] },
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/createKyc", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","createKyc"] },
+            "body": { "mode": "raw", "raw": "{\n  \"tenantId\": 1,\n  \"documentType\": \"Passport\",\n  \"documentRef\": \"tenant_1/john.pdf\"\n}" }
+          }
+        },
+        {
+          "name": "Upload Document (TENANT, multipart)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{tenantToken}}" } ] },
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/uploadDocument", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","uploadDocument"] },
+            "body": { "mode": "formdata", "formdata": [
+              { "key": "tenantId", "value": "1", "type": "text" },
+              { "key": "documentType", "value": "Passport", "type": "text" },
+              { "key": "file", "type": "file", "src": "" }
+            ] }
+          }
+        },
+        {
+          "name": "Get All KYC (MANAGER)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{managerToken}}" } ] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/getAllKyc?status=P", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","getAllKyc"], "query": [ { "key": "status", "value": "P" } ] }
+          }
+        },
+        {
+          "name": "Get KYC By Id (MANAGER)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{managerToken}}" } ] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/getKycById/{{kycId}}", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","getKycById","{{kycId}}"] }
+          }
+        },
+        {
+          "name": "Verify Document on disk (MANAGER)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{managerToken}}" } ] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/verifyDocument/{{kycId}}", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","verifyDocument","{{kycId}}"] }
+          }
+        },
+        {
+          "name": "Verify KYC P->V (MANAGER)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{managerToken}}" } ] },
+            "method": "PUT",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/verifyKyc/{{kycId}}", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","verifyKyc","{{kycId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"V\"\n}" }
+          }
+        },
+        {
+          "name": "[403] Get All KYC as TENANT",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{tenantToken}}" } ] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/getAllKyc", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","getAllKyc"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lease Agreement",
+      "item": [
+        {
+          "name": "Create Lease (MANAGER)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{managerToken}}" } ] },
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/createLease", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","createLease"] },
+            "body": { "mode": "raw", "raw": "{\n  \"unitId\": 1,\n  \"tenantId\": 1,\n  \"ownerId\": 2,\n  \"startDate\": \"2024-07-01\",\n  \"endDate\": \"2025-06-30\",\n  \"monthlyRent\": 25000,\n  \"securityDeposit\": 50000,\n  \"escalationPercent\": 5,\n  \"noticePeriodDays\": 30\n}" }
+          }
+        },
+        {
+          "name": "Activate Lease D->A (MANAGER)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{managerToken}}" } ] },
+            "method": "PUT",
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/activateLease/{{leaseId}}", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","activateLease","{{leaseId}}"] }
+          }
+        },
+        {
+          "name": "Renew Lease A->R (MANAGER)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{managerToken}}" } ] },
+            "method": "PUT",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/renewLease/{{leaseId}}", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","renewLease","{{leaseId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"escalationPercent\": 10\n}" }
+          }
+        },
+        {
+          "name": "Terminate Lease A->T (MANAGER)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{managerToken}}" } ] },
+            "method": "PUT",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/terminateLease/{{leaseId}}", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","terminateLease","{{leaseId}}"] },
+            "body": { "mode": "raw", "raw": "{\n}" }
+          }
+        },
+        {
+          "name": "Get All Leases (OWNER)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{ownerToken}}" } ] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/getAllLeases", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","getAllLeases"] }
+          }
+        },
+        {
+          "name": "Get Lease By Id (FINANCE)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{financeToken}}" } ] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/getLeaseById/{{leaseId}}", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","getLeaseById","{{leaseId}}"] }
+          }
+        },
+        {
+          "name": "[403] Create Lease as TENANT",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [ { "key": "token", "value": "{{tenantToken}}" } ] },
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/createLease", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","createLease"] },
+            "body": { "mode": "raw", "raw": "{\n  \"unitId\": 1,\n  \"tenantId\": 1,\n  \"ownerId\": 2,\n  \"startDate\": \"2024-07-01\",\n  \"endDate\": \"2025-06-30\",\n  \"monthlyRent\": 25000,\n  \"securityDeposit\": 50000,\n  \"escalationPercent\": 5,\n  \"noticePeriodDays\": 30\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Negative - No Token (expect 401)",
+      "item": [
+        {
+          "name": "Get All KYC (no token)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tenantOnboarding/getAllKyc", "host": ["{{baseUrl}}"], "path": ["tenantOnboarding","getAllKyc"] }
+          }
+        }
+      ]
+    }
+  ]
+}
