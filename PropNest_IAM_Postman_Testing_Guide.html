@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PropNest IAM - Postman Testing Guide</title>
+<style>
+  body { font-family: 'Calibri', sans-serif; font-size: 11pt; color: #1a1a1a; line-height: 1.4; }
+  h1 { color: #1F3864; font-size: 22pt; border-bottom: 3px solid #1F3864; padding-bottom: 6px; }
+  h2 { color: #1F3864; font-size: 16pt; margin-top: 22px; border-bottom: 1px solid #B4C6E7; padding-bottom: 3px; }
+  h3 { color: #2E5496; font-size: 13pt; margin-top: 18px; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+  th, td { border: 1px solid #9CB3D5; padding: 5px 8px; text-align: left; vertical-align: top; font-size: 10pt; }
+  th { background: #1F3864; color: #ffffff; }
+  tr:nth-child(even) td { background: #EAF0F9; }
+  pre { background: #F4F4F4; border: 1px solid #CCCCCC; border-left: 4px solid #1F3864;
+        padding: 8px 10px; font-family: 'Consolas','Courier New',monospace; font-size: 9.5pt;
+        white-space: pre-wrap; }
+  code { font-family: 'Consolas','Courier New',monospace; background: #F0F0F0; padding: 1px 4px; }
+  .method { font-weight: bold; color: #ffffff; padding: 2px 8px; border-radius: 3px; font-family: Consolas, monospace; }
+  .get { background: #2E7D32; }
+  .post { background: #6A1B9A; }
+  .put { background: #E65100; }
+  .badge { font-size: 9pt; font-weight: bold; padding: 1px 6px; border-radius: 3px; }
+  .pub { background: #C8E6C9; color: #1B5E20; }
+  .auth { background: #BBDEFB; color: #0D47A1; }
+  .admin { background: #FFCDD2; color: #B71C1C; }
+  .note { background: #FFF8E1; border-left: 4px solid #F9A825; padding: 6px 10px; font-size: 10pt; }
+  p.sub { color: #555; font-size: 10.5pt; margin-top: 0; }
+</style>
+</head>
+<body>
+
+<h1>PropNest &mdash; IAM API<br>Postman Testing Guide</h1>
+<p class="sub">Complete request / response reference and a recommended testing order for all 15 Identity &amp; Access Management endpoints.</p>
+
+<table>
+  <tr><th style="width:30%">Setting</th><th>Value</th></tr>
+  <tr><td>Base URL</td><td><code>http://localhost:8082/propNest/IAM</code></td></tr>
+  <tr><td>Auth scheme</td><td><code>Authorization: Bearer &lt;accessToken&gt;</code> on every protected endpoint</td></tr>
+  <tr><td>Access token lifetime</td><td>30 minutes</td></tr>
+  <tr><td>Refresh token lifetime</td><td>7 days</td></tr>
+  <tr><td>Content-Type</td><td><code>application/json</code> on every request that has a body</td></tr>
+</table>
+
+<p class="note"><b>Prerequisite:</b> the app must be running (<code>mvnw spring-boot:run</code>) with MySQL up on <code>localhost:3306</code>. The 6 roles are auto-seeded on startup.</p>
+
+<h2>1. Postman Setup (recommended)</h2>
+
+<h3>1.1 Create an Environment with these variables</h3>
+<table>
+  <tr><th style="width:35%">Variable</th><th>Initial value</th></tr>
+  <tr><td>baseUrl</td><td><code>http://localhost:8082/propNest/IAM</code></td></tr>
+  <tr><td>adminToken</td><td><i>(leave empty &mdash; filled by tests)</i></td></tr>
+  <tr><td>adminRefreshToken</td><td><i>(empty)</i></td></tr>
+  <tr><td>userToken</td><td><i>(empty)</i></td></tr>
+  <tr><td>userRefreshToken</td><td><i>(empty)</i></td></tr>
+  <tr><td>tenantUserId</td><td><i>(empty)</i></td></tr>
+</table>
+
+<h3>1.2 Auto-capture tokens</h3>
+<p>On the <b>admin Login</b> request, add this to the <b>Scripts &rarr; Post-response</b> tab so the token is stored automatically:</p>
+<pre>const json = pm.response.json();
+pm.environment.set("adminToken", json.accessToken);
+pm.environment.set("adminRefreshToken", json.refreshToken);</pre>
+<p>On the <b>normal user Login</b> request use:</p>
+<pre>const json = pm.response.json();
+pm.environment.set("userToken", json.accessToken);
+pm.environment.set("userRefreshToken", json.refreshToken);</pre>
+<p>Then in protected requests set the header <code>Authorization: Bearer {{adminToken}}</code> (or <code>{{userToken}}</code>).</p>
+
+<h2>2. Recommended Testing Order</h2>
+<p>Roles exist at startup, but no users do. So you must register an admin first, then everything flows from the tokens you obtain.</p>
+<table>
+  <tr><th style="width:6%">Step</th><th style="width:42%">Endpoint</th><th>Why this order</th></tr>
+  <tr><td>1</td><td>POST /auth/register (roleId 6 = REAL_ESTATE_ADMIN)</td><td>Create the admin account</td></tr>
+  <tr><td>2</td><td>POST /auth/login (admin)</td><td>Get adminToken + adminRefreshToken</td></tr>
+  <tr><td>3</td><td>GET /admin/roles</td><td>Confirm seeded roles / get valid roleIds</td></tr>
+  <tr><td>4</td><td>GET /users/me</td><td>Read admin's own profile</td></tr>
+  <tr><td>5</td><td>PUT /users/me</td><td>Update admin name/phone</td></tr>
+  <tr><td>6</td><td>POST /admin/users (roleId 2 = TENANT)</td><td>Admin onboards a tenant &rarr; note its userId</td></tr>
+  <tr><td>7</td><td>GET /admin/users</td><td>List all users (try ?role= / ?status=)</td></tr>
+  <tr><td>8</td><td>GET /admin/users/{userId}</td><td>Read the tenant by id</td></tr>
+  <tr><td>9</td><td>PUT /admin/users/{userId}/role</td><td>Reassign tenant's role</td></tr>
+  <tr><td>10</td><td>PUT /admin/users/{userId}/status</td><td>Suspend / reactivate tenant</td></tr>
+  <tr><td>11</td><td>POST /auth/register (roleId 2) or login as the tenant</td><td>Get a non-admin userToken</td></tr>
+  <tr><td>12</td><td>GET /admin/users with {{userToken}}</td><td><b>Expect 403</b> (role enforcement check)</td></tr>
+  <tr><td>13</td><td>PUT /users/me/password (as tenant)</td><td>Change own password</td></tr>
+  <tr><td>14</td><td>POST /auth/login (tenant, new password)</td><td>Confirm password change works</td></tr>
+  <tr><td>15</td><td>POST /auth/refresh-token</td><td>Mint a fresh access token</td></tr>
+  <tr><td>16</td><td>GET /admin/audit-log</td><td>See all recorded actions</td></tr>
+  <tr><td>17</td><td>GET /admin/audit-log/user/{userId}</td><td>See one user's actions</td></tr>
+  <tr><td>18</td><td>POST /auth/logout</td><td>Revoke the refresh token</td></tr>
+  <tr><td>19</td><td>POST /auth/refresh-token (same token)</td><td><b>Expect 401</b> (token revoked)</td></tr>
+</table>
+
+<h2>3. Endpoint Reference</h2>
+<p>Legend:
+  <span class="badge pub">public</span>
+  <span class="badge auth">authenticated</span>
+  <span class="badge admin">REAL_ESTATE_ADMIN only</span>
+</p>
+
+<h3>1. <span class="method post">POST</span> /auth/register &nbsp; <span class="badge pub">public</span></h3>
+<p><b>Headers:</b> <code>Content-Type: application/json</code></p>
+<p><b>Request Body:</b></p>
+<pre>{
+  "name": "Admin User",
+  "email": "admin@propnest.com",
+  "phone": "9876500000",
+  "password": "Admin@123",
+  "roleId": 6
+}</pre>
+<p><b>201 Created:</b></p>
+<pre>{ "message": "User registered successfully" }</pre>
+<p><b>Errors:</b> 400 (invalid input / unknown roleId), 409 (email already registered)</p>
+<pre>{ "status": 409, "message": "Email already registered: admin@propnest.com",
+  "path": "/propNest/IAM/auth/register", "timestamp": "2026-06-16T10:30:00Z" }</pre>
+<p class="note"><b>roleId values:</b> 1=OWNER, 2=TENANT, 3=PROPERTY_MANAGER, 4=TECHNICIAN, 5=FINANCE_EXECUTIVE, 6=REAL_ESTATE_ADMIN</p>
+
+<h3>2. <span class="method post">POST</span> /auth/login &nbsp; <span class="badge pub">public</span></h3>
+<p><b>Headers:</b> <code>Content-Type: application/json</code></p>
+<p><b>Request Body:</b></p>
+<pre>{
+  "email": "admin@propnest.com",
+  "password": "Admin@123"
+}</pre>
+<p><b>200 OK:</b></p>
+<pre>{
+  "accessToken": "eyJhbGciOiJIUzI1Ni...",
+  "refreshToken": "k3p9aZ...url-safe-random...",
+  "userId": 1,
+  "role": "REAL_ESTATE_ADMIN"
+}</pre>
+<p><b>Errors:</b> 400 (missing email/password), 401 (wrong credentials, or account not active)</p>
+<pre>{ "status": 401, "message": "Invalid email or password",
+  "path": "/propNest/IAM/auth/login", "timestamp": "..." }</pre>
+
+<h3>3. <span class="method post">POST</span> /auth/logout &nbsp; <span class="badge auth">authenticated</span></h3>
+<p><b>Headers:</b> <code>Content-Type: application/json</code> &middot; <code>Authorization: Bearer {{adminToken}}</code></p>
+<p><b>Request Body:</b></p>
+<pre>{ "refreshToken": "{{adminRefreshToken}}" }</pre>
+<p><b>200 OK:</b></p>
+<pre>{ "message": "Logged out successfully" }</pre>
+<p><b>Errors:</b> 401 (missing/expired access token)</p>
+
+<h3>4. <span class="method post">POST</span> /auth/refresh-token &nbsp; <span class="badge pub">refresh token</span></h3>
+<p><b>Headers:</b> <code>Content-Type: application/json</code></p>
+<p><b>Request Body:</b></p>
+<pre>{ "refreshToken": "{{adminRefreshToken}}" }</pre>
+<p><b>200 OK:</b></p>
+<pre>{ "accessToken": "eyJhbGciOiJIUzI1Ni..." }</pre>
+<p><b>Errors:</b> 401 (refresh token expired, revoked after logout, or unknown)</p>
+<pre>{ "status": 401, "message": "Refresh token expired or revoked",
+  "path": "/propNest/IAM/auth/refresh-token", "timestamp": "..." }</pre>
+
+<h3>5. <span class="method get">GET</span> /users/me &nbsp; <span class="badge auth">authenticated</span></h3>
+<p><b>Headers:</b> <code>Authorization: Bearer {{adminToken}}</code> &middot; <b>Body:</b> none</p>
+<p><b>200 OK:</b></p>
+<pre>{
+  "userId": 1,
+  "name": "Admin User",
+  "email": "admin@propnest.com",
+  "phone": "9876500000",
+  "role": "REAL_ESTATE_ADMIN",
+  "status": "A"
+}</pre>
+<p><b>Errors:</b> 401 (missing/expired token)</p>
+
+<h3>6. <span class="method put">PUT</span> /users/me &nbsp; <span class="badge auth">authenticated</span></h3>
+<p><b>Headers:</b> <code>Content-Type: application/json</code> &middot; <code>Authorization: Bearer {{adminToken}}</code></p>
+<p><b>Request Body:</b></p>
+<pre>{
+  "name": "Admin Updated",
+  "phone": "9876511111"
+}</pre>
+<p><b>200 OK:</b></p>
+<pre>{ "message": "Profile updated successfully" }</pre>
+<p><b>Errors:</b> 400 (blank name, or phone not 10-15 digits), 401</p>
+<p class="note">Only name and phone can be changed here. Email and role cannot.</p>
+
+<h3>7. <span class="method put">PUT</span> /users/me/password &nbsp; <span class="badge auth">authenticated</span></h3>
+<p><b>Headers:</b> <code>Content-Type: application/json</code> &middot; <code>Authorization: Bearer {{userToken}}</code></p>
+<p><b>Request Body:</b></p>
+<pre>{
+  "currentPassword": "Tenant@123",
+  "newPassword": "NewPass@456"
+}</pre>
+<p><b>200 OK:</b></p>
+<pre>{ "message": "Password changed successfully" }</pre>
+<p><b>Errors:</b> 400 (current password incorrect, or new password &lt; 8 chars), 401</p>
+<pre>{ "status": 400, "message": "Current password is incorrect",
+  "path": "/propNest/IAM/users/me/password", "timestamp": "..." }</pre>
+
+<h3>8. <span class="method post">POST</span> /admin/users &nbsp; <span class="badge admin">REAL_ESTATE_ADMIN only</span></h3>
+<p><b>Headers:</b> <code>Content-Type: application/json</code> &middot; <code>Authorization: Bearer {{adminToken}}</code></p>
+<p><b>Request Body:</b></p>
+<pre>{
+  "name": "Ravi Kumar",
+  "email": "ravi@propnest.com",
+  "phone": "9123456789",
+  "password": "Tenant@123",
+  "roleId": 2
+}</pre>
+<p><b>201 Created:</b></p>
+<pre>{ "message": "User created successfully" }</pre>
+<p><b>Errors:</b> 400 (invalid input / unknown roleId), 401, 403 (not admin), 409 (email exists)</p>
+<p class="note">Tip: capture the created user's id by calling <code>GET /admin/users?role=TENANT</code> and saving tenantUserId for the next steps.</p>
+
+<h3>9. <span class="method get">GET</span> /admin/users &nbsp; <span class="badge admin">REAL_ESTATE_ADMIN only</span></h3>
+<p><b>Headers:</b> <code>Authorization: Bearer {{adminToken}}</code></p>
+<p><b>Optional query params:</b> <code>?role=TENANT</code> &nbsp; <code>?status=A</code> &nbsp; <code>?role=TENANT&amp;status=A</code></p>
+<p>Example: <code>GET {{baseUrl}}/admin/users?role=TENANT&amp;status=A</code></p>
+<p><b>200 OK:</b></p>
+<pre>{
+  "users": [
+    {
+      "userId": 2,
+      "name": "Ravi Kumar",
+      "email": "ravi@propnest.com",
+      "phone": "9123456789",
+      "role": "TENANT",
+      "status": "A"
+    }
+  ]
+}</pre>
+<p><b>Errors:</b> 400 (invalid status; allowed A, I, S), 401, 403</p>
+<p><b>Post-response script</b> to save the tenant id (when filtering to one user):</p>
+<pre>const u = pm.response.json().users[0];
+if (u) pm.environment.set("tenantUserId", u.userId);</pre>
+
+<h3>10. <span class="method get">GET</span> /admin/users/{userId} &nbsp; <span class="badge admin">REAL_ESTATE_ADMIN only</span></h3>
+<p><b>Headers:</b> <code>Authorization: Bearer {{adminToken}}</code></p>
+<p>Example: <code>GET {{baseUrl}}/admin/users/{{tenantUserId}}</code></p>
+<p><b>200 OK:</b></p>
+<pre>{
+  "userId": 2,
+  "name": "Ravi Kumar",
+  "email": "ravi@propnest.com",
+  "phone": "9123456789",
+  "role": "TENANT",
+  "status": "A"
+}</pre>
+<p><b>Errors:</b> 401, 403, 404 (no user with that id)</p>
+<pre>{ "status": 404, "message": "User not found with id: 999",
+  "path": "/propNest/IAM/admin/users/999", "timestamp": "..." }</pre>
+
+<h3>11. <span class="method put">PUT</span> /admin/users/{userId}/status &nbsp; <span class="badge admin">REAL_ESTATE_ADMIN only</span></h3>
+<p><b>Headers:</b> <code>Content-Type: application/json</code> &middot; <code>Authorization: Bearer {{adminToken}}</code></p>
+<p><b>Request Body:</b></p>
+<pre>{ "status": "S" }</pre>
+<p>Allowed values: <b>A</b> = Active, <b>I</b> = Inactive (soft-delete), <b>S</b> = Suspended.</p>
+<p><b>200 OK:</b></p>
+<pre>{ "message": "User status updated successfully" }</pre>
+<p><b>Errors:</b> 400 (invalid status value), 401, 403, 404</p>
+<p class="note">A suspended (S) or inactive (I) user can no longer log in (login returns 401). Set it back to A to re-enable login.</p>
+
+<h3>12. <span class="method put">PUT</span> /admin/users/{userId}/role &nbsp; <span class="badge admin">REAL_ESTATE_ADMIN only</span></h3>
+<p><b>Headers:</b> <code>Content-Type: application/json</code> &middot; <code>Authorization: Bearer {{adminToken}}</code></p>
+<p><b>Request Body:</b></p>
+<pre>{ "roleId": 3 }</pre>
+<p><b>200 OK:</b></p>
+<pre>{ "message": "User role updated successfully" }</pre>
+<p><b>Errors:</b> 400 (unknown roleId), 401, 403, 404</p>
+
+<h3>13. <span class="method get">GET</span> /admin/roles &nbsp; <span class="badge admin">REAL_ESTATE_ADMIN only</span></h3>
+<p><b>Headers:</b> <code>Authorization: Bearer {{adminToken}}</code></p>
+<p><b>200 OK:</b></p>
+<pre>{
+  "roles": [
+    { "roleId": 1, "roleName": "OWNER" },
+    { "roleId": 2, "roleName": "TENANT" },
+    { "roleId": 3, "roleName": "PROPERTY_MANAGER" },
+    { "roleId": 4, "roleName": "TECHNICIAN" },
+    { "roleId": 5, "roleName": "FINANCE_EXECUTIVE" },
+    { "roleId": 6, "roleName": "REAL_ESTATE_ADMIN" }
+  ]
+}</pre>
+<p><b>Errors:</b> 401, 403</p>
+
+<h3>14. <span class="method get">GET</span> /admin/audit-log &nbsp; <span class="badge admin">REAL_ESTATE_ADMIN only</span></h3>
+<p><b>Headers:</b> <code>Authorization: Bearer {{adminToken}}</code></p>
+<p><b>200 OK</b> (most recent first):</p>
+<pre>{
+  "logs": [
+    { "auditId": 5, "userId": 2, "action": "USER_ROLE_UPDATED", "entityType": "USER", "timeStamp": "2026-06-16T10:40:12Z" },
+    { "auditId": 1, "userId": 1, "action": "USER_REGISTERED",   "entityType": "USER", "timeStamp": "2026-06-16T10:30:00Z" }
+  ]
+}</pre>
+<p><b>Errors:</b> 401, 403</p>
+<p class="note">Recorded actions: USER_REGISTERED, USER_LOGIN, USER_LOGOUT, TOKEN_REFRESHED, PROFILE_UPDATED, PASSWORD_CHANGED, USER_CREATED, USER_STATUS_UPDATED, USER_ROLE_UPDATED.</p>
+
+<h3>15. <span class="method get">GET</span> /admin/audit-log/user/{userId} &nbsp; <span class="badge admin">REAL_ESTATE_ADMIN only</span></h3>
+<p><b>Headers:</b> <code>Authorization: Bearer {{adminToken}}</code></p>
+<p>Example: <code>GET {{baseUrl}}/admin/audit-log/user/{{tenantUserId}}</code></p>
+<p><b>200 OK:</b></p>
+<pre>{
+  "logs": [
+    { "auditId": 5, "userId": 2, "action": "USER_ROLE_UPDATED", "entityType": "USER", "timeStamp": "2026-06-16T10:40:12Z" },
+    { "auditId": 3, "userId": 2, "action": "USER_CREATED",      "entityType": "USER", "timeStamp": "2026-06-16T10:35:00Z" }
+  ]
+}</pre>
+<p><b>Errors:</b> 401, 403, 404 (no user with that id)</p>
+
+<h2>4. Quick Error-Code Cheat Sheet</h2>
+<table>
+  <tr><th style="width:12%">Code</th><th style="width:28%">Meaning</th><th>Typical trigger</th></tr>
+  <tr><td>200 OK</td><td>Success</td><td>GET / PUT / login / refresh / logout</td></tr>
+  <tr><td>201 Created</td><td>Created</td><td>register, admin create user</td></tr>
+  <tr><td>400 Bad Request</td><td>Invalid input</td><td>validation failure, invalid roleId, invalid status, wrong current password</td></tr>
+  <tr><td>401 Unauthorized</td><td>Not authenticated</td><td>missing/expired/invalid token, bad login, revoked refresh token</td></tr>
+  <tr><td>403 Forbidden</td><td>Wrong role</td><td>authenticated but not REAL_ESTATE_ADMIN on an admin endpoint</td></tr>
+  <tr><td>404 Not Found</td><td>Missing resource</td><td>unknown userId on admin user / audit-log lookups</td></tr>
+  <tr><td>409 Conflict</td><td>Duplicate</td><td>duplicate email</td></tr>
+  <tr><td>500 Server Error</td><td>Server fault</td><td>unexpected error</td></tr>
+</table>
+<p>All error bodies share this shape:</p>
+<pre>{ "status": 401, "message": "...", "path": "/propNest/IAM/...", "timestamp": "2026-06-16T10:30:00Z" }</pre>
+
+<h2>5. Negative Tests Worth Running</h2>
+<table>
+  <tr><th style="width:34%">Scenario</th><th style="width:36%">How</th><th>Expected</th></tr>
+  <tr><td>No token on protected endpoint</td><td>GET /users/me with no Authorization header</td><td>401 Token missing or expired</td></tr>
+  <tr><td>Tampered/expired access token</td><td>Change one char of {{adminToken}}</td><td>401 Invalid access token</td></tr>
+  <tr><td>Non-admin hits admin endpoint</td><td>GET /admin/users with {{userToken}}</td><td>403 Forbidden</td></tr>
+  <tr><td>Duplicate registration</td><td>Register same email twice</td><td>409 Conflict</td></tr>
+  <tr><td>Login while suspended</td><td>Set status S, then login</td><td>401 Account is not active</td></tr>
+  <tr><td>Refresh after logout</td><td>Logout, then refresh same token</td><td>401 Refresh token expired or revoked</td></tr>
+  <tr><td>Invalid roleId on register</td><td>"roleId": 99</td><td>400 Invalid roleId</td></tr>
+  <tr><td>Invalid status value</td><td>PUT .../status body { "status": "X" }</td><td>400 Invalid status value</td></tr>
+</table>
+
+</body>
+</html>

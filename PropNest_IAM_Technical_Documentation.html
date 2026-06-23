@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PropNest IAM - Technical Documentation</title>
+<style>
+  body { font-family: 'Calibri', sans-serif; font-size: 11pt; color: #1a1a1a; line-height: 1.45; }
+  h1 { color: #1F3864; font-size: 26pt; border-bottom: 3px solid #1F3864; padding-bottom: 8px; }
+  h2 { color: #1F3864; font-size: 17pt; margin-top: 26px; border-bottom: 1.5px solid #B4C6E7; padding-bottom: 4px; }
+  h3 { color: #2E5496; font-size: 13.5pt; margin-top: 20px; }
+  h4 { color: #2E5496; font-size: 11.5pt; margin-top: 14px; margin-bottom: 4px; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+  th, td { border: 1px solid #9CB3D5; padding: 5px 8px; text-align: left; vertical-align: top; font-size: 10pt; }
+  th { background: #1F3864; color: #ffffff; }
+  tr:nth-child(even) td { background: #EAF0F9; }
+  pre { background: #F4F4F4; border: 1px solid #CCCCCC; border-left: 4px solid #1F3864;
+        padding: 8px 10px; font-family: 'Consolas','Courier New',monospace; font-size: 9.5pt;
+        white-space: pre-wrap; }
+  code { font-family: 'Consolas','Courier New',monospace; background: #F0F0F0; padding: 1px 4px; }
+  .note { background: #FFF8E1; border-left: 4px solid #F9A825; padding: 6px 10px; font-size: 10pt; }
+  .tip  { background: #E8F5E9; border-left: 4px solid #2E7D32; padding: 6px 10px; font-size: 10pt; }
+  p.sub { color: #555; font-size: 11pt; margin-top: 0; }
+  ul { margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<h1>PropNest &mdash; Identity &amp; Access Management<br>Technical Reference Documentation</h1>
+<p class="sub">A complete, file-by-file reference for the IAM module of the PropNest platform: architecture, components, security model, annotations, request flows, and test strategy. Written for onboarding new developers and for stakeholder hand-off.</p>
+
+<table>
+  <tr><th style="width:28%">Attribute</th><th>Value</th></tr>
+  <tr><td>Project</td><td>PropNest &mdash; Identity &amp; Access Management (IAM) module</td></tr>
+  <tr><td>Group / Artifact</td><td><code>com.cog : propNest</code> (version 0.0.1-SNAPSHOT)</td></tr>
+  <tr><td>Language / Runtime</td><td>Java 21</td></tr>
+  <tr><td>Framework</td><td>Spring Boot 4.0.6 (Spring Framework 7, Spring MVC servlet stack)</td></tr>
+  <tr><td>Persistence</td><td>Spring Data JPA / Hibernate ORM &rarr; MySQL</td></tr>
+  <tr><td>Security</td><td>Stateless JWT access tokens + persisted refresh tokens; BCrypt password hashing</td></tr>
+  <tr><td>Base URL</td><td><code>http://localhost:8082/propNest/IAM</code></td></tr>
+  <tr><td>Endpoints</td><td>15 REST endpoints across 6 functional groups</td></tr>
+  <tr><td>Automated tests</td><td>127 tests (services, repositories, controllers, security) &mdash; all passing</td></tr>
+</table>
+
+<h2>1. Executive Summary</h2>
+<p>The IAM module is the identity backbone of PropNest. It is responsible for:</p>
+<ul>
+  <li><b>Authentication</b> &mdash; verifying who a user is (registration, login, logout, token refresh).</li>
+  <li><b>Authorization</b> &mdash; deciding what a user may do, based on one of six roles (OWNER, TENANT, PROPERTY_MANAGER, TECHNICIAN, FINANCE_EXECUTIVE, REAL_ESTATE_ADMIN).</li>
+  <li><b>User lifecycle management</b> &mdash; admins create users, change their status (Active / Inactive / Suspended), and reassign roles.</li>
+  <li><b>Self-service</b> &mdash; any logged-in user can view and update their own profile and change their password.</li>
+  <li><b>Auditing</b> &mdash; every security-relevant action is written to an immutable audit log for regulatory traceability.</li>
+</ul>
+<p>It issues short-lived <b>JWT access tokens</b> (30 minutes) for stateless authentication and long-lived <b>refresh tokens</b> (7 days, stored in the database) so sessions can be renewed and revoked. The module is designed as one slice of a larger modular monolith, sharing a common response/exception foundation with future modules (Property Listing, Tenant Onboarding, Rent &amp; Deposit, Maintenance, Notifications).</p>
+
+<h2>2. Technology Stack &amp; External Dependencies</h2>
+<p>Dependencies are declared in <code>pom.xml</code> and version-managed by the Spring Boot parent. Each is chosen deliberately:</p>
+<table>
+  <tr><th style="width:34%">Dependency</th><th>Why it is used</th></tr>
+  <tr><td>spring-boot-starter-webmvc</td><td>The servlet-based REST stack (controllers, request mapping, JSON conversion). The IAM endpoints are synchronous request/response, which suits Spring MVC.</td></tr>
+  <tr><td>spring-boot-starter-data-jpa</td><td>Repository abstraction over Hibernate; gives derived query methods and transaction management without hand-written SQL.</td></tr>
+  <tr><td>spring-boot-starter-validation</td><td>Bean Validation (Jakarta) so request DTOs are validated declaratively with annotations such as <code>@NotBlank</code>, <code>@Email</code>.</td></tr>
+  <tr><td>spring-security-crypto</td><td>Provides <code>BCryptPasswordEncoder</code> only. We deliberately avoid the full Spring Security starter so that no default security auto-configuration is activated &mdash; authentication is handled by the module's own JWT filter.</td></tr>
+  <tr><td>jjwt-api / jjwt-impl / jjwt-jackson (0.12.6)</td><td>The JJWT library for creating and verifying signed JSON Web Tokens (HMAC-SHA256).</td></tr>
+  <tr><td>mysql-connector-j</td><td>JDBC driver for the MySQL database (runtime scope).</td></tr>
+  <tr><td>lombok</td><td>Compile-time code generation for getters/setters/builders/constructors, removing boilerplate from entities.</td></tr>
+  <tr><td>H2 (test scope)</td><td>In-memory database used by repository slice tests so they run fast and need no external MySQL.</td></tr>
+  <tr><td>spring-boot-starter-*-test</td><td>JUnit 5, Mockito, AssertJ, Spring Test (MockMvc) and the data-jpa / web-mvc test slices.</td></tr>
+</table>
+<p class="note"><b>Note on Spring Boot 4:</b> the test slice annotations were relocated &mdash; <code>@DataJpaTest</code> now lives in <code>org.springframework.boot.data.jpa.test.autoconfigure</code>, and JSON is handled by Jackson 3 (<code>tools.jackson</code>). The code is written against these new locations.</p>
+
+<h2>3. Project Structure &amp; Layered Architecture</h2>
+<p>The codebase follows a <b>layered (n-tier) architecture</b> inside a <b>module-per-domain</b> package layout. Each business domain gets its own package tree; within it, responsibilities are separated into layers.</p>
+
+<h3>3.1 Folder structure</h3>
+<pre>com.cog.propNest
+├── PropNestApplication.java          (Spring Boot entry point)
+├── common/                            (cross-cutting, shared by all modules)
+│   ├── exception/                     (shared exceptions + global handler)
+│   └── response/                      (ApiResponse, ErrorResponse wrappers)
+├── config/                            (app-wide beans, e.g. PasswordEncoder)
+└── module/
+    └── identityAccessManagement/      (the IAM module)
+        ├── config/                    (RoleSeeder)
+        ├── controller/                (5 REST controllers - the web layer)
+        ├── service/                   (business logic + audit helpers)
+        ├── repository/                (Spring Data JPA interfaces)
+        ├── entity/                    (JPA entities + enums - the data model)
+        ├── dto/                        (request/response data carriers)
+        ├── security/                   (JWT service, auth filter, context, guard)
+        └── exception/                  (module-specific exceptions + handler)</pre>
+
+<h3>3.2 The layers and why they exist</h3>
+<table>
+  <tr><th style="width:18%">Layer</th><th style="width:34%">Responsibility</th><th>Why separated</th></tr>
+  <tr><td>Controller (web)</td><td>Translate HTTP requests into method calls; map results to HTTP responses and status codes.</td><td>Keeps transport concerns (HTTP, JSON, status codes) out of business logic. Controllers stay "thin".</td></tr>
+  <tr><td>Service (business)</td><td>Enforce business rules, orchestrate repositories, manage transactions, write audit logs.</td><td>Single place for rules; reusable by multiple controllers; independently unit-testable with mocks.</td></tr>
+  <tr><td>Repository (data)</td><td>Read/write entities to the database via Spring Data JPA.</td><td>Abstracts persistence; swappable; derived queries remove boilerplate SQL.</td></tr>
+  <tr><td>Entity (model)</td><td>Object-relational mapping of database tables.</td><td>One authoritative definition of the schema in code.</td></tr>
+  <tr><td>DTO (contract)</td><td>Shape the data crossing the API boundary.</td><td>Decouples the public API from the internal schema (see &sect;7).</td></tr>
+  <tr><td>Security</td><td>Authenticate tokens, expose caller identity, enforce roles.</td><td>Centralises auth so controllers/services need not repeat it.</td></tr>
+  <tr><td>Exception</td><td>Typed errors + advice that turns them into consistent HTTP responses.</td><td>Uniform error contract; no try/catch scattered across the code.</td></tr>
+</table>
+<p><b>Separation of concerns</b> means each layer has one reason to change. A change in JSON shape touches only DTOs; a new business rule touches only services; a database column rename touches only entities. This makes the system easier to test, reason about, and extend.</p>
+
+<h2>4. Application Bootstrap &amp; Configuration</h2>
+
+<h3>4.1 PropNestApplication.java</h3>
+<pre>@SpringBootApplication
+public class PropNestApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(PropNestApplication.class, args);
+    }
+}</pre>
+<ul>
+  <li><b>What:</b> the entry point that starts the embedded server and the Spring context.</li>
+  <li><b>@SpringBootApplication:</b> a meta-annotation combining <code>@Configuration</code> (this class can define beans), <code>@EnableAutoConfiguration</code> (Boot auto-configures the datasource, JPA, web stack from the classpath), and <code>@ComponentScan</code> (discovers all <code>@Component</code>/<code>@Service</code>/<code>@RestController</code>/<code>@Repository</code> beans under <code>com.cog.propNest</code>).</li>
+  <li><b>How it connects:</b> because the scan root is <code>com.cog.propNest</code>, every class in <code>common</code>, <code>config</code>, and <code>module.*</code> is automatically wired.</li>
+</ul>
+
+<h3>4.2 application.properties</h3>
+<p>Externalised configuration so the same JAR runs in any environment by changing properties:</p>
+<table>
+  <tr><th style="width:42%">Property</th><th>Purpose</th></tr>
+  <tr><td>server.port=8082</td><td>The HTTP port.</td></tr>
+  <tr><td>server.servlet.context-path=/propNest</td><td>Prefixes every URL with <code>/propNest</code>; controllers add the <code>/IAM/...</code> part, producing the documented base URL.</td></tr>
+  <tr><td>spring.main.web-application-type=servlet</td><td>Forces the servlet (Spring MVC) stack.</td></tr>
+  <tr><td>spring.datasource.* (url/username/password/driver)</td><td>MySQL connection. The URL includes <code>createDatabaseIfNotExist=true</code>.</td></tr>
+  <tr><td>spring.jpa.hibernate.ddl-auto=update</td><td>Hibernate creates/updates tables from the entities at startup (development convenience).</td></tr>
+  <tr><td>spring.jpa.open-in-view=false</td><td>Disables the open-session-in-view anti-pattern; transactions are bounded to the service layer.</td></tr>
+  <tr><td>propnest.jwt.secret</td><td>Base64-encoded HMAC signing key (&ge; 256 bits). Override in production.</td></tr>
+  <tr><td>propnest.jwt.access-token-expiry-ms=1800000</td><td>Access token lifetime = 30 minutes.</td></tr>
+  <tr><td>propnest.jwt.refresh-token-expiry-ms=604800000</td><td>Refresh token lifetime = 7 days.</td></tr>
+  <tr><td>propnest.jwt.issuer=propNest-IAM</td><td>The <code>iss</code> claim, validated on every token.</td></tr>
+</table>
+
+<h3>4.3 config/SecurityBeansConfig.java</h3>
+<pre>@Configuration
+public class SecurityBeansConfig {
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+}</pre>
+<ul>
+  <li><b>What:</b> publishes a single <code>PasswordEncoder</code> bean backed by BCrypt.</li>
+  <li><b>Why:</b> BCrypt is a deliberately slow, salted, adaptive hash &mdash; the industry standard for storing passwords. A shared bean means every service hashes/verifies identically.</li>
+  <li><b>@Configuration / @Bean:</b> marks a class that contributes beans; the <code>@Bean</code> method's return value becomes a managed singleton injected wherever <code>PasswordEncoder</code> is required.</li>
+</ul>
+
+<h3>4.4 module/.../config/RoleSeeder.java</h3>
+<ul>
+  <li><b>What:</b> on startup, inserts the six fixed roles (ids 1&ndash;6) if they are not already present.</li>
+  <li><b>Why:</b> roles are reference data with fixed ids mandated by the API contract (e.g. <code>roleId 6 = REAL_ESTATE_ADMIN</code>). Seeding guarantees they always exist before any user is created.</li>
+  <li><b>How:</b> it exposes an <code>ApplicationRunner</code> bean; Spring Boot runs it once the context is ready. It checks <code>existsById</code> before saving, making it idempotent across restarts.</li>
+</ul>
+
+<h2>5. Data Model (Entities &amp; Enums)</h2>
+<p>Four tables model the domain. Entities are the single source of truth for the schema; Hibernate generates DDL from them.</p>
+
+<h3>5.1 Entity-relationship overview</h3>
+<table>
+  <tr><th style="width:20%">Table</th><th style="width:30%">Key columns</th><th>Relationships</th></tr>
+  <tr><td>roles</td><td>roleId (PK), roleName</td><td>One role &rarr; many users</td></tr>
+  <tr><td>users</td><td>userId (PK), roleId (FK), name, email (unique), phone, passwordHash, status</td><td>Many users &rarr; one role</td></tr>
+  <tr><td>user_session</td><td>sessionId (PK), userId, refreshToken, createdAt, refreshTokenExpiryTime, status</td><td>References a user (by id)</td></tr>
+  <tr><td>audit_log</td><td>auditId (PK), userId, action, entityType, timeStamp</td><td>References a user (by id)</td></tr>
+</table>
+
+<h3>5.2 Role.java</h3>
+<p>Maps the <code>roles</code> table. <code>@Id</code> on <code>roleId</code> with no generator because ids are fixed reference values. Lombok <code>@Getter/@Setter/@NoArgsConstructor/@AllArgsConstructor</code> generate the accessors and constructors.</p>
+
+<h3>5.3 User.java</h3>
+<pre>@Entity @Table(name = "users")
+public class User {
+    @Id @GeneratedValue(strategy = IDENTITY) private Long userId;
+    @ManyToOne(fetch = EAGER, optional = false)
+    @JoinColumn(name = "roleId", nullable = false) private Role role;
+    @Column(unique = true, length = 150) private String email;
+    @Column(name = "passwordHash") private String passwordHash;
+    @Enumerated(STRING) private UserStatus status;
+}</pre>
+<ul>
+  <li><b>@Entity / @Table:</b> declares a persistent class and the table it maps to.</li>
+  <li><b>@Id + @GeneratedValue(IDENTITY):</b> primary key, auto-incremented by the database.</li>
+  <li><b>@ManyToOne + @JoinColumn:</b> the foreign-key relationship to <code>roles</code>; many users share one role. <code>optional=false</code> enforces that every user has a role.</li>
+  <li><b>@Column(unique=true):</b> enforces the email uniqueness constraint at the database level &mdash; a second safety net behind the service-level check.</li>
+  <li><b>@Enumerated(STRING):</b> stores the status enum as text (<code>A/I/S</code>) rather than a fragile ordinal number.</li>
+  <li><b>passwordHash:</b> only the BCrypt hash is ever stored &mdash; the raw password never persists and is never returned.</li>
+</ul>
+
+<h3>5.4 UserSession.java</h3>
+<p>Maps <code>user_session</code>. Stores the long-lived refresh token, its creation time, its expiry, and a status (<code>ACTIVE</code>/<code>REVOKED</code>). Access tokens are stateless and are <i>not</i> stored; only the refresh token is persisted so it can be rotated and revoked on logout.</p>
+
+<h3>5.5 AuditLog.java</h3>
+<p>Maps <code>audit_log</code>. An append-only record of an action (<code>USER_LOGIN</code>, <code>PASSWORD_CHANGED</code>, &hellip;), the entity type, the user id, and a timestamp. There are no update/delete paths &mdash; logs are immutable by design.</p>
+
+<h3>5.6 Enums: UserStatus &amp; SessionStatus</h3>
+<ul>
+  <li><b>UserStatus</b> &mdash; <code>A</code> (Active, can log in), <code>I</code> (Inactive, soft-deleted, record retained for audit), <code>S</code> (Suspended, cannot log in).</li>
+  <li><b>SessionStatus</b> &mdash; <code>ACTIVE</code> (refresh token usable) or <code>REVOKED</code> (after logout/rotation).</li>
+</ul>
+
+<h2>6. Repositories (Data Access Layer)</h2>
+<p>Each repository is an interface extending <code>JpaRepository&lt;Entity, IdType&gt;</code>. Spring Data generates the implementation at runtime, providing CRUD plus any <b>derived query methods</b> (the method name describes the query, so no SQL is written).</p>
+<table>
+  <tr><th style="width:26%">Repository</th><th>Key methods &amp; purpose</th></tr>
+  <tr><td>RoleRepository</td><td><code>findByRoleNameIgnoreCase</code> &mdash; look up a role by name irrespective of case.</td></tr>
+  <tr><td>UserRepository</td><td><code>findByEmailIgnoreCase</code>, <code>existsByEmailIgnoreCase</code> (login &amp; duplicate checks), <code>findByRole_RoleNameIgnoreCase</code>, <code>findByStatus</code>, and the combined <code>findByRole_RoleNameIgnoreCaseAndStatus</code> (admin list filters).</td></tr>
+  <tr><td>UserSessionRepository</td><td><code>findByRefreshToken</code> &mdash; locate a session during refresh/logout.</td></tr>
+  <tr><td>AuditLogRepository</td><td><code>findAllByOrderByTimeStampDesc</code> and <code>findByUserIdOrderByTimeStampDesc</code> &mdash; newest-first audit views.</td></tr>
+</table>
+<p class="tip"><b>Why JPA/Hibernate:</b> it maps rows to objects automatically, manages the persistence context and dirty-checking (modified entities are flushed without an explicit save), and lets us express most queries as type-safe method names. The nested property syntax <code>Role_RoleName</code> traverses the <code>user.role.roleName</code> association.</p>
+
+<h2>7. DTOs (Data Transfer Objects)</h2>
+<p>All DTOs are Java <b>records</b> &mdash; immutable, concise carriers. They define the exact JSON the API accepts and returns.</p>
+<h4>Why entities are never exposed directly</h4>
+<ul>
+  <li><b>Security:</b> entities carry sensitive fields (e.g. <code>passwordHash</code>). DTOs expose only safe fields, so a hash can never accidentally serialize into a response.</li>
+  <li><b>Stability:</b> the public contract is decoupled from the database. Renaming a column does not break clients.</li>
+  <li><b>Validation:</b> request DTOs hold Bean Validation annotations, keeping input rules at the boundary.</li>
+  <li><b>Performance/clarity:</b> each endpoint returns precisely the fields it needs &mdash; no lazy-loading surprises or over-fetching.</li>
+</ul>
+<table>
+  <tr><th style="width:30%">Request DTOs</th><th>Validation highlights</th></tr>
+  <tr><td>RegisterRequest</td><td>name <code>@NotBlank</code>, email <code>@Email</code>, password <code>@Size(min=8)</code>, roleId <code>@NotNull</code>, phone pattern 10&ndash;15 digits.</td></tr>
+  <tr><td>LoginRequest</td><td>email <code>@Email</code> + password <code>@NotBlank</code>.</td></tr>
+  <tr><td>RefreshTokenRequest</td><td>refreshToken <code>@NotBlank</code> (reused by refresh &amp; logout).</td></tr>
+  <tr><td>UpdateProfileRequest</td><td>name <code>@NotBlank</code>, phone pattern.</td></tr>
+  <tr><td>ChangePasswordRequest</td><td>currentPassword + newPassword (<code>@Size(min=8)</code>).</td></tr>
+  <tr><td>UpdateStatusRequest / UpdateRoleRequest</td><td>status <code>@NotBlank</code> / roleId <code>@NotNull</code>.</td></tr>
+</table>
+<table>
+  <tr><th style="width:30%">Response DTOs</th><th>Shape</th></tr>
+  <tr><td>MessageResponse</td><td><code>{ "message": "..." }</code> for POST/PUT results.</td></tr>
+  <tr><td>LoginResponse</td><td>accessToken, refreshToken, userId, role.</td></tr>
+  <tr><td>AccessTokenResponse</td><td>accessToken (from refresh).</td></tr>
+  <tr><td>UserResponse / UserListResponse</td><td>safe user view (no hash) and a list wrapper; built via a static <code>from(User)</code> mapper.</td></tr>
+  <tr><td>RoleResponse / RoleListResponse</td><td>role view and list wrapper.</td></tr>
+  <tr><td>AuditLogResponse / AuditLogListResponse</td><td>audit entry view and list wrapper.</td></tr>
+</table>
+
+<h2>8. Services (Business Logic Layer)</h2>
+<p>Services hold all rules and orchestration. They are annotated <code>@Service</code> (a <code>@Component</code> stereotype) and use <code>@Transactional</code> so a method runs in a single database transaction (rolled back automatically on a runtime exception). Read-only methods use <code>@Transactional(readOnly = true)</code> for efficiency.</p>
+
+<h3>8.1 AuthService</h3>
+<ul>
+  <li><b>register</b> &mdash; validates the roleId exists (else <code>InvalidRoleException</code>), rejects duplicate emails (<code>EmailAlreadyExistsException</code>), BCrypt-hashes the password, saves the user as Active, and audits <code>USER_REGISTERED</code>.</li>
+  <li><b>login</b> &mdash; loads the user by email, verifies the password with the encoder, rejects non-active accounts (<code>AccountNotActiveException</code>), creates an <code>ACTIVE</code> session with a fresh refresh token, mints an access token, audits <code>USER_LOGIN</code>, and returns both tokens + identity.</li>
+  <li><b>logout</b> &mdash; finds the session by refresh token and sets it <code>REVOKED</code> (idempotent if absent); audits <code>USER_LOGOUT</code>.</li>
+  <li><b>refreshToken</b> &mdash; validates the session is present, <code>ACTIVE</code>, and not expired (else <code>InvalidRefreshTokenException</code>), then issues a new access token and audits <code>TOKEN_REFRESHED</code>.</li>
+</ul>
+
+<h3>8.2 UserSelfService</h3>
+<p>Self-service for the authenticated user: <b>getProfile</b>, <b>updateProfile</b> (name/phone only), and <b>changePassword</b> (verifies current password &mdash; else <code>IncorrectPasswordException</code> &mdash; then stores a new hash). Each mutating action is audited.</p>
+
+<h3>8.3 AdminUserService</h3>
+<p>Admin operations: <b>createUser</b>, <b>getAllUsers</b> (optional role/status filters; an invalid status string raises <code>InvalidUserStatusException</code>), <b>getUserById</b> (<code>UserNotFoundException</code> if absent), <b>updateStatus</b>, and <b>updateRole</b>. Status parsing is case-insensitive and constrained to the enum.</p>
+
+<h3>8.4 RoleService &amp; AuditLogService</h3>
+<ul>
+  <li><b>RoleService.getAllRoles</b> &mdash; returns all roles sorted by id (for admin dropdowns).</li>
+  <li><b>AuditLogService</b> &mdash; <b>getAllLogs</b> (system-wide) and <b>getLogsForUser</b> (validates the user exists first).</li>
+</ul>
+
+<h3>8.5 AuditService &amp; AuditActions</h3>
+<p><b>AuditService.record(userId, action)</b> builds and saves an <code>AuditLog</code> stamped with the current time. <b>AuditActions</b> centralises the action-name constants so spellings never drift. Every other service depends on this one helper, keeping audit writes consistent.</p>
+
+<h2>9. Controllers (Web Layer)</h2>
+<p>Controllers are annotated <code>@RestController</code> (every method returns a value serialized to JSON) and <code>@RequestMapping</code> (a shared URL prefix). They are intentionally <b>thin</b>: read the request, call one service method, wrap the result in a <code>ResponseEntity</code> with the right status. No business rules live here.</p>
+<h4>Why controllers should be thin</h4>
+<p>If rules lived in controllers they could not be reused by other entry points (schedulers, messaging, other controllers) and would be hard to unit-test without spinning up the web layer. Thin controllers keep the system testable and the rules in one place.</p>
+<table>
+  <tr><th style="width:6%">#</th><th style="width:10%">Method</th><th style="width:40%">Path</th><th>Controller &rarr; Service</th></tr>
+  <tr><td>1</td><td>POST</td><td>/IAM/auth/register</td><td>AuthController &rarr; AuthService.register</td></tr>
+  <tr><td>2</td><td>POST</td><td>/IAM/auth/login</td><td>AuthController &rarr; AuthService.login</td></tr>
+  <tr><td>3</td><td>POST</td><td>/IAM/auth/logout</td><td>AuthController &rarr; AuthService.logout</td></tr>
+  <tr><td>4</td><td>POST</td><td>/IAM/auth/refresh-token</td><td>AuthController &rarr; AuthService.refreshToken</td></tr>
+  <tr><td>5</td><td>GET</td><td>/IAM/users/me</td><td>UserSelfController &rarr; UserSelfService.getProfile</td></tr>
+  <tr><td>6</td><td>PUT</td><td>/IAM/users/me</td><td>UserSelfController &rarr; UserSelfService.updateProfile</td></tr>
+  <tr><td>7</td><td>PUT</td><td>/IAM/users/me/password</td><td>UserSelfController &rarr; UserSelfService.changePassword</td></tr>
+  <tr><td>8</td><td>POST</td><td>/IAM/admin/users</td><td>AdminUserController &rarr; AdminUserService.createUser</td></tr>
+  <tr><td>9</td><td>GET</td><td>/IAM/admin/users (?role,?status)</td><td>AdminUserController &rarr; getAllUsers</td></tr>
+  <tr><td>10</td><td>GET</td><td>/IAM/admin/users/{userId}</td><td>AdminUserController &rarr; getUserById</td></tr>
+  <tr><td>11</td><td>PUT</td><td>/IAM/admin/users/{userId}/status</td><td>AdminUserController &rarr; updateStatus</td></tr>
+  <tr><td>12</td><td>PUT</td><td>/IAM/admin/users/{userId}/role</td><td>AdminUserController &rarr; updateRole</td></tr>
+  <tr><td>13</td><td>GET</td><td>/IAM/admin/roles</td><td>RoleController &rarr; RoleService.getAllRoles</td></tr>
+  <tr><td>14</td><td>GET</td><td>/IAM/admin/audit-log</td><td>AuditLogController &rarr; getAllLogs</td></tr>
+  <tr><td>15</td><td>GET</td><td>/IAM/admin/audit-log/user/{userId}</td><td>AuditLogController &rarr; getLogsForUser</td></tr>
+</table>
+<ul>
+  <li><b>@PostMapping / @GetMapping / @PutMapping:</b> bind a method to an HTTP verb + sub-path.</li>
+  <li><b>@RequestBody:</b> deserialize the JSON body into a DTO (then validated by <code>@Valid</code>).</li>
+  <li><b>@PathVariable:</b> bind a URL segment such as <code>{userId}</code> to a parameter.</li>
+  <li><b>@RequestParam:</b> bind optional query parameters (<code>?role</code>, <code>?status</code>).</li>
+  <li><b>Admin controllers</b> call <code>accessGuard.requireAdmin()</code> first; self-service controllers read the caller id from <code>AuthContext.require()</code>.</li>
+</ul>
+
+<h2>10. Security &amp; JWT (IAM Core)</h2>
+
+<h3>10.1 What is a JWT?</h3>
+<p>A <b>JSON Web Token</b> is a compact, URL-safe, digitally signed token carrying claims about the user. It has three dot-separated, Base64URL-encoded parts:</p>
+<table>
+  <tr><th style="width:18%">Part</th><th>Contents</th></tr>
+  <tr><td>Header</td><td>The token type (JWT) and signing algorithm (HS256 / HMAC-SHA256).</td></tr>
+  <tr><td>Payload</td><td>The claims: <code>iss</code> (issuer = propNest-IAM), <code>sub</code> (the userId), custom <code>email</code> and <code>role</code> claims, <code>iat</code> (issued-at), <code>exp</code> (expiry).</td></tr>
+  <tr><td>Signature</td><td><code>HMACSHA256(base64(header) + "." + base64(payload), secret)</code>. Any tampering invalidates it because the secret is known only to the server.</td></tr>
+</table>
+<p><b>Why stateless:</b> the access token itself carries the identity and is cryptographically verifiable, so the server need not store session state or hit the database to authenticate a request. This scales horizontally &mdash; any instance can validate any token.</p>
+<table>
+  <tr><th style="width:50%">Advantages</th><th>Limitations / mitigations</th></tr>
+  <tr><td>No server-side session store; scales across instances; self-contained identity; fast verification.</td><td>Cannot be revoked before expiry &rarr; mitigated with <b>short 30-minute lifetimes</b> and a separately stored, revocable <b>refresh token</b> for renewal/logout.</td></tr>
+</table>
+
+<h3>10.2 JwtService</h3>
+<ul>
+  <li><b>generateAccessToken(user):</b> builds and signs a JWT with subject=userId and email/role claims, expiring in 30 minutes.</li>
+  <li><b>parseAccessToken(token):</b> verifies the signature and issuer, checks expiry, and returns a <code>CurrentUser(userId, email, role)</code>. On expiry/tampering/malformation it throws <code>InvalidTokenException</code> (HTTP 401).</li>
+  <li><b>generateRefreshToken():</b> a 48-byte cryptographically random, URL-safe string (opaque, not a JWT) &mdash; stored in the DB so it can be revoked.</li>
+  <li><b>refreshTokenExpiry():</b> computes the 7-day expiry instant.</li>
+  <li>The signing key is built once from the Base64 secret using <code>Keys.hmacShaKeyFor(...)</code>.</li>
+</ul>
+
+<h3>10.3 JwtAuthenticationFilter</h3>
+<p>A <code>OncePerRequestFilter</code> (runs once per request, before controllers) that enforces authentication on protected IAM paths:</p>
+<ol>
+  <li>If the path is outside <code>/IAM</code> or is a public endpoint (register, login, refresh-token), it passes through untouched.</li>
+  <li>Otherwise it extracts the <code>Authorization: Bearer &lt;token&gt;</code> header. Missing token &rarr; writes a 401 JSON body directly.</li>
+  <li>It validates the token via <code>JwtService</code>; on success it binds the <code>CurrentUser</code> to <code>AuthContext</code> and continues the chain; on failure it writes 401.</li>
+  <li>A <code>finally</code> block always clears <code>AuthContext</code> so identity never leaks between requests on a reused thread.</li>
+</ol>
+
+<h3>10.4 AuthContext, CurrentUser, AccessGuard, RoleNames</h3>
+<ul>
+  <li><b>CurrentUser</b> &mdash; an immutable record (userId, email, role) representing the authenticated caller.</li>
+  <li><b>AuthContext</b> &mdash; a <code>ThreadLocal</code> holder. <code>set/clear</code> are called by the filter; <code>require()</code> returns the caller or throws <code>TokenMissingException</code> (401). It lets controllers/services read the caller without passing it through every method signature.</li>
+  <li><b>AccessGuard.requireAdmin()</b> &mdash; reads the current user and throws <code>AccessDeniedException</code> (403) unless the role is <code>REAL_ESTATE_ADMIN</code>. Admin controllers call it first.</li>
+  <li><b>RoleNames</b> &mdash; string constants for the six roles, preventing typos in comparisons.</li>
+</ul>
+
+<h3>10.5 Authentication &amp; authorization flow</h3>
+<pre>Login:    client -> POST /auth/login -> AuthService verifies password
+          -> store refresh-token session -> return access + refresh tokens
+
+Protected call:
+   client sends "Authorization: Bearer &lt;access&gt;"
+   -> JwtAuthenticationFilter validates token -> AuthContext.set(currentUser)
+   -> Controller (AccessGuard.requireAdmin() for admin routes)
+   -> Service -> Repository -> DB -> DTO response
+   -> filter clears AuthContext
+
+Renewal:  access token expires (30 min) -> client calls POST /auth/refresh-token
+          with the still-valid refresh token -> new access token issued
+
+Logout:   POST /auth/logout revokes the refresh-token session;
+          the client discards the (stateless) access token.</pre>
+
+<h2>11. Error Handling Strategy</h2>
+<p>Errors are modelled as <b>typed exceptions</b> and translated centrally, so no controller contains try/catch and every error returns the same JSON shape: <code>{ status, message, path, timestamp }</code>.</p>
+
+<h3>11.1 Module exceptions (identityAccessManagement/exception)</h3>
+<p>All extend a common base <b>IamException</b>, which carries the HTTP status each maps to. A single advice (<b>IamExceptionHandler</b>, <code>@RestControllerAdvice</code>, highest precedence) converts any <code>IamException</code> into the standard error body using that status.</p>
+<table>
+  <tr><th style="width:36%">Exception</th><th style="width:12%">HTTP</th><th>Raised when</th></tr>
+  <tr><td>UserNotFoundException</td><td>404</td><td>userId not found</td></tr>
+  <tr><td>EmailAlreadyExistsException</td><td>409</td><td>duplicate email on register/create</td></tr>
+  <tr><td>InvalidCredentialsException</td><td>401</td><td>wrong email/password at login</td></tr>
+  <tr><td>AccountNotActiveException</td><td>401</td><td>suspended/inactive user logs in</td></tr>
+  <tr><td>InvalidRefreshTokenException</td><td>401</td><td>refresh token unknown/expired/revoked</td></tr>
+  <tr><td>TokenMissingException</td><td>401</td><td>no token on a protected endpoint</td></tr>
+  <tr><td>InvalidTokenException</td><td>401</td><td>malformed/expired/bad-signature access token</td></tr>
+  <tr><td>AccessDeniedException</td><td>403</td><td>authenticated but not admin</td></tr>
+  <tr><td>InvalidRoleException</td><td>400</td><td>unknown roleId</td></tr>
+  <tr><td>InvalidUserStatusException</td><td>400</td><td>status outside A/I/S</td></tr>
+  <tr><td>IncorrectPasswordException</td><td>400</td><td>wrong current password</td></tr>
+</table>
+
+<h3>11.2 Shared layer (common/exception &amp; common/response)</h3>
+<ul>
+  <li><b>GlobalExceptionHandler</b> &mdash; a fallback advice that handles Bean Validation failures (<code>MethodArgumentNotValidException</code> &rarr; 400 with field messages), the shared exceptions, and any uncaught <code>Exception</code> (&rarr; 500).</li>
+  <li><b>ErrorResponse</b> &mdash; the uniform error body (status, message, path, timestamp).</li>
+  <li><b>ApiResponse&lt;T&gt;</b> &mdash; a generic success wrapper available to all modules.</li>
+</ul>
+<p class="note">The module advice has highest precedence, so IAM-specific exceptions are handled with their precise statuses; anything it does not recognise falls through to the global handler.</p>
+
+<h2>12. Annotation Reference</h2>
+<table>
+  <tr><th style="width:26%">Annotation</th><th style="width:14%">Origin</th><th>What it does / why used</th></tr>
+  <tr><td>@SpringBootApplication</td><td>Spring Boot</td><td>Bootstraps the app: config + auto-config + component scan.</td></tr>
+  <tr><td>@Configuration</td><td>Spring</td><td>Marks a class that defines beans.</td></tr>
+  <tr><td>@Bean</td><td>Spring</td><td>Declares a single managed bean (e.g. PasswordEncoder).</td></tr>
+  <tr><td>@Component / @Service</td><td>Spring</td><td>Stereotype for an auto-detected bean; <code>@Service</code> marks the business layer.</td></tr>
+  <tr><td>@RestController</td><td>Spring</td><td>Controller whose return values are serialized to the response body (JSON).</td></tr>
+  <tr><td>@RequestMapping</td><td>Spring</td><td>Base URL path for a controller.</td></tr>
+  <tr><td>@GetMapping/@PostMapping/@PutMapping</td><td>Spring</td><td>Bind a method to an HTTP verb + path.</td></tr>
+  <tr><td>@RequestBody / @PathVariable / @RequestParam</td><td>Spring</td><td>Bind body / URL segment / query parameter to method arguments.</td></tr>
+  <tr><td>@RestControllerAdvice</td><td>Spring</td><td>Global/centralised exception handling returning JSON.</td></tr>
+  <tr><td>@ExceptionHandler</td><td>Spring</td><td>Maps an exception type to a handler method.</td></tr>
+  <tr><td>@Transactional</td><td>Spring</td><td>Runs a method in a DB transaction; rolls back on runtime errors. <code>readOnly=true</code> optimises reads.</td></tr>
+  <tr><td>Constructor injection</td><td>Spring</td><td>Dependencies passed via the constructor (preferred over <code>@Autowired</code> fields: immutable, testable, no hidden nulls).</td></tr>
+  <tr><td>@Valid</td><td>Jakarta Validation</td><td>Triggers DTO validation before the controller body runs.</td></tr>
+  <tr><td>@NotBlank/@NotNull/@Email/@Size/@Pattern</td><td>Jakarta Validation</td><td>Declarative field-level input constraints.</td></tr>
+  <tr><td>@Entity / @Table</td><td>JPA</td><td>Marks a persistent class and its table.</td></tr>
+  <tr><td>@Id / @GeneratedValue</td><td>JPA</td><td>Primary key and its generation strategy.</td></tr>
+  <tr><td>@Column</td><td>JPA</td><td>Column mapping, length, nullability, uniqueness.</td></tr>
+  <tr><td>@ManyToOne / @JoinColumn</td><td>JPA</td><td>Foreign-key association and its column.</td></tr>
+  <tr><td>@Enumerated(STRING)</td><td>JPA</td><td>Persist an enum as text, not a fragile ordinal.</td></tr>
+  <tr><td>@Getter/@Setter/@NoArgsConstructor/@AllArgsConstructor/@Builder</td><td>Lombok</td><td>Generate accessors, constructors, and a fluent builder at compile time &mdash; less boilerplate. (<code>@Data</code> bundles getters/setters/equals/hashCode/toString; here the finer-grained set is used.)</td></tr>
+  <tr><td>@ExtendWith(MockitoExtension)</td><td>JUnit/Mockito</td><td>Enables Mockito annotations in a test.</td></tr>
+  <tr><td>@Mock / @InjectMocks</td><td>Mockito</td><td>Create a mock dependency / inject mocks into the class under test.</td></tr>
+  <tr><td>@Test / @BeforeEach / @AfterEach / @DisplayName</td><td>JUnit 5</td><td>Mark a test / setup / teardown / human-readable name.</td></tr>
+  <tr><td>@DataJpaTest</td><td>Spring Boot Test</td><td>Loads only the JPA slice against an in-memory H2 DB for fast repository tests.</td></tr>
+</table>
+
+<h2>13. End-to-End Flow Examples</h2>
+<h4>Example: admin creates a tenant</h4>
+<pre>POST /propNest/IAM/admin/users  (Authorization: Bearer &lt;admin access token&gt;)
+  -> JwtAuthenticationFilter validates token, sets AuthContext(admin)
+  -> AdminUserController.createUser: accessGuard.requireAdmin() passes
+  -> @Valid validates RegisterRequest
+  -> AdminUserService.createUser: role lookup, duplicate-email check,
+       BCrypt hash, save user, AuditService.record(USER_CREATED)
+  -> 201 { "message": "User created successfully" }
+  -> filter clears AuthContext</pre>
+<h4>Example: validation failure</h4>
+<pre>POST /auth/register with a blank name / bad email
+  -> @Valid fails -> MethodArgumentNotValidException
+  -> GlobalExceptionHandler -> 400 { status, message, path, timestamp }</pre>
+
+<h2>14. Testing Strategy (JUnit 5 &amp; Mockito)</h2>
+<p>The module ships with <b>127 automated tests</b> across all three layers; the full suite passes (0 failures, 0 errors). Tests are the safety net that lets the team refactor confidently.</p>
+<table>
+  <tr><th style="width:24%">Layer</th><th style="width:14%">Tests</th><th>Technique &amp; what is validated</th></tr>
+  <tr><td>Service</td><td>56</td><td>Pure Mockito unit tests (<code>@Mock</code> repositories/encoder/JWT/audit, <code>@InjectMocks</code> service). Validate business rules, exception paths, and that the right collaborators are called. Mocking isolates the rule under test from the database.</td></tr>
+  <tr><td>Repository</td><td>22</td><td><code>@DataJpaTest</code> against in-memory H2. Validate derived queries, the unique-email constraint, enum persistence, ordering, and associations.</td></tr>
+  <tr><td>Controller</td><td>33</td><td>Standalone <code>MockMvc</code> with mocked services and the real exception advice. Validate status codes, JSON shape, role enforcement (401/403), and validation (400).</td></tr>
+  <tr><td>Security</td><td>16</td><td>JwtService round-trip / tamper / expiry / issuer; AuthContext and AccessGuard behaviour.</td></tr>
+</table>
+<h4>Why mocking is required</h4>
+<p>A service test should fail only when the <i>service logic</i> is wrong &mdash; not because a database is down. Mockito supplies fake repositories whose responses we control, so each test exercises exactly one rule and runs in milliseconds. The repository tests, by contrast, use a real (in-memory) database because their whole purpose is to verify the queries.</p>
+<h4>Anatomy of a test</h4>
+<pre>@ExtendWith(MockitoExtension.class)
+class AuthServiceTest {
+    @Mock UserRepository userRepository;       // controlled fake
+    @InjectMocks AuthService authService;      // class under test
+    @Test void login_wrongPassword() {
+        when(userRepository.findByEmailIgnoreCase(...)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches(...)).thenReturn(false);
+        assertThatThrownBy(() -> authService.login(...))
+            .isInstanceOf(InvalidCredentialsException.class);  // expected behaviour
+    }
+}</pre>
+
+<h2>15. Logging &amp; Observability</h2>
+<ul>
+  <li><b>Audit logging</b> is first-class: every state change writes an <code>audit_log</code> row via <code>AuditService</code>, queryable through admin endpoints for compliance.</li>
+  <li><b>SQL logging</b> is enabled in development (<code>spring.jpa.show-sql=true</code>, formatted) to inspect generated queries.</li>
+  <li><b>Framework logging</b> uses Spring Boot's default SLF4J/Logback. The seeder and filter emit context to the standard log.</li>
+</ul>
+
+<h2>16. Appendix &mdash; File Index</h2>
+<table>
+  <tr><th style="width:34%">Area</th><th>Files</th></tr>
+  <tr><td>Bootstrap / config</td><td>PropNestApplication, application.properties, config/SecurityBeansConfig, module/config/RoleSeeder</td></tr>
+  <tr><td>Entities / enums</td><td>Role, User, UserSession, AuditLog, UserStatus, SessionStatus</td></tr>
+  <tr><td>Repositories</td><td>RoleRepository, UserRepository, UserSessionRepository, AuditLogRepository</td></tr>
+  <tr><td>DTOs</td><td>Register/Login/RefreshToken/UpdateProfile/ChangePassword/UpdateStatus/UpdateRole requests; Message/Login/AccessToken/User/UserList/Role/RoleList/AuditLog/AuditLogList responses</td></tr>
+  <tr><td>Services</td><td>AuthService, UserSelfService, AdminUserService, RoleService, AuditLogService, AuditService, AuditActions</td></tr>
+  <tr><td>Controllers</td><td>AuthController, UserSelfController, AdminUserController, RoleController, AuditLogController</td></tr>
+  <tr><td>Security</td><td>JwtService, JwtAuthenticationFilter, AuthContext, CurrentUser, AccessGuard, RoleNames</td></tr>
+  <tr><td>Exceptions (module)</td><td>IamException (base), IamExceptionHandler, + 11 typed exceptions</td></tr>
+  <tr><td>Shared (common)</td><td>GlobalExceptionHandler, ErrorResponse, ApiResponse, and shared exception types</td></tr>
+  <tr><td>Tests</td><td>7 service, 4 repository, 5 controller, 3 security test classes (127 tests total)</td></tr>
+</table>
+
+<p style="margin-top:24px; color:#777; font-size:9pt;">PropNest IAM Technical Documentation &mdash; generated for the pod2-propNest repository.</p>
+
+</body>
+</html>

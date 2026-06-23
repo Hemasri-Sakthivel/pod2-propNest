@@ -1,0 +1,17 @@
+package com.cog.propNest.module.identityAccessManagement.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+/**
+ * Body for {@code PUT /IAM/users/me/password}.
+ */
+public record ChangePasswordRequest(
+        @NotBlank(message = "currentPassword is required")
+        String currentPassword,
+
+        @NotBlank(message = "newPassword is required")
+        @Size(min = 8, max = 100, message = "newPassword must be 8-100 characters")
+        String newPassword
+) {
+}
